@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(if not exist \"C:\\\\dotnet\\\\runtime\\\\.claude\\\\plans\" mkdir \"C:\\\\dotnet\\\\runtime\\\\.claude\\\\plans\")"
+    ]
+  }
+}
