@@ -1,302 +1,506 @@
-# Plan: Adding FreeRTOS Support for ARM32 Architecture
+# Plan: Adding FreeRTOS Support for ARM32 Architecture (NativeAOT)
 
-This document outlines the steps required to add FreeRTOS as a new target operating system to the .NET runtime, targeting the ARM32 CPU architecture.
+This document outlines the steps required to add FreeRTOS as a new target operating system to the .NET runtime using **NativeAOT**, targeting the ARM32 CPU architecture.
 
 ## Overview
 
 **Target OS:** FreeRTOS
 **Target Architecture:** ARM32 (arm)
 **Runtime Identifier (RID):** `freertos-arm`
+**Runtime:** NativeAOT (ILC compiler + minimal runtime)
 
-FreeRTOS is a real-time operating system (RTOS) for embedded systems. Unlike illumos or other Unix-like systems, FreeRTOS has a fundamentally different execution model:
-- No virtual memory / MMU (typically)
-- Single address space
-- Cooperative/preemptive task scheduling (not processes)
-- Limited or no dynamic linking
-- No POSIX API (though FreeRTOS+POSIX exists)
+### Why NativeAOT for FreeRTOS?
 
-This means a full CoreCLR port is likely **not feasible**. The realistic targets are:
-1. **Mono runtime** (interpreter mode) - Most viable
-2. **NativeAOT** - Possible but requires significant work
+| Aspect | NativeAOT | Mono AOT | CoreCLR |
+|--------|-----------|----------|---------|
+| Binary output | Single native executable | Native + IL + Mono runtime | Requires full runtime |
+| Runtime size | Minimal (~few hundred KB) | Larger (MB+) | Largest |
+| IL at runtime | No | Yes | Yes |
+| Virtual memory required | No | Typically yes | Yes |
+| Dynamic loading | No | Yes | Yes |
+| Reflection | Limited | Full | Full |
+| **FreeRTOS fit** | **Best** | Possible | Not feasible |
 
-## Phase 1: Build System Infrastructure
+NativeAOT produces standalone native binaries with a minimal runtime statically linked in. This is ideal for FreeRTOS because:
+- No IL interpretation at runtime
+- Small binary footprint
+- No dynamic loading requirements
+- Tree shaking removes unused code
+- Self-contained deployment
 
-### 1.1 Build Script Updates
+### Limitations Accepted
 
-**File: `eng/build.sh`**
-- Add `freertos` to the target OS options in help text (line ~34)
-- Add case handler for `freertos` OS selection (around line 290)
+By choosing NativeAOT, we accept these limitations:
+- No `Reflection.Emit` or `DynamicMethod`
+- No `Assembly.Load()` at runtime
+- Limited reflection (only statically analyzable)
+- Serialization requires source generators
+- No hot reload or plugin systems
 
-```bash
-freertos)
-  os="freertos" ;;
-```
+These limitations align well with embedded firmware constraints.
 
-### 1.2 MSBuild Properties
+---
 
-**File: `eng/RuntimeIdentifier.props`**
-- Add `TargetsFreertos` property (following illumos pattern at line 50):
-```xml
-<TargetsFreertos Condition="'$(TargetOS)' == 'freertos'">true</TargetsFreertos>
-```
-- Update `TargetsUnix` to include freertos (or create separate `TargetsRTOS` property)
+## Phase 1: Build System Infrastructure [COMPLETED]
 
-**File: `eng/OSArch.props`**
-- Add FreeRTOS host OS detection (line ~7):
-```xml
-<_hostOS Condition="$([MSBuild]::IsOSPlatform('FREERTOS'))">freertos</_hostOS>
-```
+Build system changes have been implemented to recognize `freertos` as a valid target OS.
 
-**File: `eng/Subsets.props`**
-- Add `freertos` to the NativeAOT exclusion list if not supporting NativeAOT (line ~50)
-- Define which subsets are buildable for FreeRTOS
+### Files Modified
+- `eng/build.sh` - Added freertos to OS options
+- `eng/build.ps1` - Added freertos to ValidateSet
+- `eng/RuntimeIdentifier.props` - Added `TargetsFreertos` property
+- `eng/OSArch.props` - Added FreeRTOS host OS detection
+- `eng/Subsets.props` - Configured CoreCLR/NativeAOT exclusions for FreeRTOS
+- `eng/versioning.targets` - Added FreeRTOS to supported platforms
+- `eng/native/configureplatform.cmake` - Added FreeRTOS host/target detection
+- `eng/native/configurecompiler.cmake` - Added `TARGET_FREERTOS` compile definition
+- `eng/native/tryrun.cmake` - Added FreeRTOS detection and cache values
+- `eng/common/cross/toolchain.cmake` - Added `arm-none-eabi` toolchain config
+- `eng/common/native/init-distro-rid.sh` - Added FreeRTOS RID generation
+- `eng/common/cross/build-rootfs.sh` - Added FreeRTOS rootfs setup
 
-**File: `eng/versioning.targets`**
-- Add FreeRTOS to supported platforms (line ~84):
-```xml
-<SupportedPlatform Condition="'$(TargetPlatformIdentifier)' == 'freertos'" Include="freertos" />
-```
+---
 
-### 1.3 CMake Configuration
+## Phase 2: Enable NativeAOT for FreeRTOS
 
-**File: `eng/native/configureplatform.cmake`**
-- Add FreeRTOS detection block (following illumos pattern at lines 208-214):
-```cmake
-if(CLR_CMAKE_HOST_OS STREQUAL freertos)
-    set(CLR_CMAKE_HOST_FREERTOS 1)
-    # FreeRTOS is not Unix-like in the traditional sense
-    set(CLR_CMAKE_HOST_RTOS 1)
-endif()
-```
-- Add target OS configuration (around line 423):
-```cmake
-if(CLR_CMAKE_TARGET_OS STREQUAL freertos)
-    set(CLR_CMAKE_TARGET_FREERTOS 1)
-    set(CLR_CMAKE_TARGET_RTOS 1)
-endif()
-```
-
-**File: `eng/native/configurecompiler.cmake`**
-- Add `TARGET_FREERTOS` compile definition (following line 764):
-```cmake
-if(CLR_CMAKE_TARGET_FREERTOS)
-  add_compile_definitions($<$<NOT:$<BOOL:$<TARGET_PROPERTY:IGNORE_DEFAULT_TARGET_OS>>>:TARGET_FREERTOS>)
-endif()
-```
-- Configure ARM32 compiler flags for embedded targets (thumb mode, no-exceptions, etc.)
-
-**File: `eng/native/tryrun.cmake`**
-- Add FreeRTOS detection in cross-compilation rootfs check (around line 39)
-- Set appropriate cache values for FreeRTOS capabilities (no POSIX semaphores, etc.)
-
-**File: `eng/common/cross/toolchain.cmake`**
-- Add toolchain configuration for FreeRTOS cross-compilation:
-```cmake
-elseif(FREERTOS)
-  set(TOOLCHAIN "arm-none-eabi")
-```
-- Configure sysroot and linker flags for FreeRTOS SDK
-
-### 1.4 Shell Scripts
-
-**File: `eng/common/native/init-os-and-arch.sh`**
-- Add FreeRTOS detection (though this may not apply for cross-compilation only)
-
-**File: `eng/common/native/init-distro-rid.sh`**
-- Add FreeRTOS RID generation (around line 45):
-```bash
-elif [ "$targetOs" = "freertos" ]; then
-    nonPortableRid="freertos-${targetArch}"
-```
-
-### 1.5 Cross-Compilation Rootfs
-
-**File: `eng/common/cross/build-rootfs.sh`**
-- Add FreeRTOS rootfs setup support
-- Define `__FreertosPackages` for required dependencies
-- Add download/setup for FreeRTOS SDK and ARM toolchain
-
-## Phase 2: Runtime Selection
-
-Given FreeRTOS constraints, **CoreCLR is not a viable target**. Focus on:
-
-### 2.1 Mono Runtime (Recommended Path)
-
-Mono has better support for constrained environments and interpreter mode.
-
-**Key files to modify:**
-- `src/mono/mono.proj` - Add FreeRTOS as target
-- `src/mono/CMakeLists.txt` - Add FreeRTOS configuration
-- `src/mono/mono/utils/` - Add FreeRTOS-specific implementations
-
-**Required Mono work:**
-1. Implement FreeRTOS threading primitives (`mono-threads-freertos.c`)
-2. Implement memory allocation using FreeRTOS heap APIs
-3. Disable/stub unavailable features (signals, fork, mmap)
-4. Configure for interpreter-only mode (no JIT on typical embedded ARM)
-
-### 2.2 NativeAOT (Alternative Path)
-
-NativeAOT compiles to standalone native binaries, potentially suitable for embedded.
+### 2.1 Update Build Configuration
 
 **File: `eng/Subsets.props`**
-- Consider enabling NativeAOT for FreeRTOS if pursuing this path
+- Currently FreeRTOS is excluded from NativeAOT. Need to enable it:
+```xml
+<!-- Change from excluding freertos to supporting it -->
+<_NativeAotSupportedOS Condition="'$(TargetOS)' != 'browser' and '$(TargetOS)' != 'haiku' ...">true</_NativeAotSupportedOS>
+```
 
-**Required work:**
-- Implement minimal PAL for FreeRTOS
-- Configure linker scripts for embedded targets
-- Implement FreeRTOS-specific startup code
+**File: `src/coreclr/nativeaot/BuildIntegration/Microsoft.NETCore.Native.targets`**
+- Add FreeRTOS-specific linker configuration
+- Configure for bare-metal ARM linking
 
-## Phase 3: Native Host Components
+### 2.2 ILC Compiler Configuration
 
-**File: `src/native/corehost/hostmisc/pal.unix.cpp`**
-- Add FreeRTOS RID platform detection (following illumos at line 709):
+**File: `src/coreclr/tools/aot/ILCompiler/ILCompiler.csproj`**
+- Ensure ARM32 target support for FreeRTOS
+
+**File: `src/coreclr/tools/aot/ILCompiler.Compiler/Compiler/DependencyAnalysis/Target_ARM/`**
+- Verify ARM32 code generation works for bare-metal targets
+
+---
+
+## Phase 3: NativeAOT Runtime PAL for FreeRTOS
+
+The NativeAOT runtime has a Platform Abstraction Layer (PAL) that must be implemented for FreeRTOS.
+
+### 3.1 Create FreeRTOS PAL Implementation
+
+**New File: `src/coreclr/nativeaot/Runtime/freertos/PalFreeRTOS.cpp`**
+
+This is the main PAL implementation. Key functions to implement:
+
+#### Memory Management
 ```cpp
-#elif defined(TARGET_FREERTOS)
-pal::string_t pal::get_current_os_rid_platform()
+// Map to FreeRTOS heap allocation (no virtual memory)
+void* PalVirtualAlloc(uintptr_t size, uint32_t protect)
 {
-    return _X("freertos");
+    // FreeRTOS: pvPortMalloc() - ignore protection flags
+    return pvPortMalloc(size);
+}
+
+void PalVirtualFree(void* pAddress, uintptr_t size)
+{
+    vPortFree(pAddress);
+}
+
+UInt32_BOOL PalVirtualProtect(void* pAddress, uintptr_t size, uint32_t protect)
+{
+    // No-op on FreeRTOS (no MMU protection)
+    return TRUE;
+}
+
+uint32_t PalGetOsPageSize()
+{
+    // Return a reasonable default for embedded
+    return 4096;
 }
 ```
 
-**File: `src/native/corehost/hostpolicy/deps_format.cpp`**
-- Add FreeRTOS to platform fallback chain (line ~209)
+#### Threading (FreeRTOS Tasks)
+```cpp
+bool PalStartBackgroundGCThread(BackgroundCallback callback, void* pCallbackContext)
+{
+    // Create FreeRTOS task for GC
+    return xTaskCreate(
+        (TaskFunction_t)callback,
+        "GC",
+        configMINIMAL_STACK_SIZE * 4,
+        pCallbackContext,
+        tskIDLE_PRIORITY + 1,
+        NULL
+    ) == pdPASS;
+}
 
-**Note:** For embedded FreeRTOS, the standard corehost may not apply. A custom minimal host or direct embedding may be needed.
+bool PalStartFinalizerThread(BackgroundCallback callback, void* pCallbackContext)
+{
+    return xTaskCreate(
+        (TaskFunction_t)callback,
+        "Finalizer",
+        configMINIMAL_STACK_SIZE * 2,
+        pCallbackContext,
+        tskIDLE_PRIORITY + 1,
+        NULL
+    ) == pdPASS;
+}
 
-## Phase 4: PAL Implementation
+void PalSleep(uint32_t milliseconds)
+{
+    vTaskDelay(pdMS_TO_TICKS(milliseconds));
+}
 
-Create FreeRTOS-specific PAL implementation:
+UInt32_BOOL PalSwitchToThread()
+{
+    taskYIELD();
+    return TRUE;
+}
 
-### 4.1 New Files Required
-
+uint64_t PalGetCurrentOSThreadId()
+{
+    return (uint64_t)xTaskGetCurrentTaskHandle();
+}
 ```
-src/coreclr/pal/src/arch/arm/freertos/
-├── context.S          # Context save/restore for ARM32
-├── exceptionhelper.S  # Exception handling stubs
-└── processor.cpp      # ARM32 processor detection
 
-src/coreclr/pal/src/thread/
-└── thread-freertos.cpp  # FreeRTOS task/thread mapping
+#### Synchronization (FreeRTOS Semaphores/Events)
+```cpp
+HANDLE PalCreateEventW(LPSECURITY_ATTRIBUTES pEventAttributes,
+                       UInt32_BOOL manualReset,
+                       UInt32_BOOL initialState,
+                       LPCWSTR pName)
+{
+    // Use FreeRTOS binary semaphore for auto-reset events
+    // Use event groups for manual-reset events
+    SemaphoreHandle_t sem = xSemaphoreCreateBinary();
+    if (initialState)
+        xSemaphoreGive(sem);
+    return (HANDLE)sem;
+}
 
-src/coreclr/pal/src/sync/
-└── sync-freertos.cpp    # FreeRTOS semaphore/mutex wrappers
+UInt32_BOOL PalSetEvent(HANDLE handle)
+{
+    return xSemaphoreGive((SemaphoreHandle_t)handle) == pdTRUE;
+}
+
+UInt32_BOOL PalResetEvent(HANDLE handle)
+{
+    xSemaphoreTake((SemaphoreHandle_t)handle, 0);
+    return TRUE;
+}
+
+uint32_t PalWaitForSingleObjectEx(HANDLE handle, uint32_t timeout, UInt32_BOOL alertable)
+{
+    TickType_t ticks = (timeout == INFINITE) ? portMAX_DELAY : pdMS_TO_TICKS(timeout);
+    if (xSemaphoreTake((SemaphoreHandle_t)handle, ticks) == pdTRUE)
+        return WAIT_OBJECT_0;
+    return WAIT_TIMEOUT;
+}
 ```
 
-### 4.2 PAL Header Updates
+#### System Functions
+```cpp
+uint32_t PalGetCurrentProcessId()
+{
+    return 1; // Single "process" on FreeRTOS
+}
 
-**File: `src/coreclr/pal/inc/pal.h`**
+void PalGetSystemTimeAsFileTime(FILETIME* ft)
+{
+    // Use FreeRTOS tick count or RTC if available
+    TickType_t ticks = xTaskGetTickCount();
+    uint64_t time = (uint64_t)ticks * (10000000ULL / configTICK_RATE_HZ);
+    ft->dwLowDateTime = (uint32_t)time;
+    ft->dwHighDateTime = (uint32_t)(time >> 32);
+}
+
+void PalPrintFatalError(const char* message)
+{
+    // Output to UART/debug console
+    printf("FATAL: %s\n", message);
+    while(1) { } // Halt
+}
+```
+
+### 3.2 PAL Header Updates
+
+**File: `src/coreclr/nativeaot/Runtime/Pal.h`**
 - Add `TARGET_FREERTOS` conditionals
-- Define CONTEXT structure for ARM32
-- Stub out unavailable APIs (signals, fork, etc.)
+- Include FreeRTOS headers conditionally
 
-### 4.3 Key PAL Functions to Implement
+```cpp
+#ifdef TARGET_FREERTOS
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+#include "event_groups.h"
+#endif
+```
 
-| Function | FreeRTOS Implementation |
-|----------|------------------------|
-| `PAL_Initialize` | Initialize FreeRTOS task context |
-| `CreateThread` | `xTaskCreate()` wrapper |
-| `WaitForSingleObject` | `xSemaphoreTake()` |
-| `SetEvent/ResetEvent` | FreeRTOS event groups |
-| `VirtualAlloc` | `pvPortMalloc()` (no virtual memory) |
-| `GetCurrentThreadId` | `xTaskGetCurrentTaskHandle()` |
+### 3.3 Additional FreeRTOS-Specific Files
 
-## Phase 5: GC Considerations
+**New File: `src/coreclr/nativeaot/Runtime/freertos/HardwareExceptions.cpp`**
+- Handle ARM HardFault, MemManage, BusFault
+- Map to .NET exception handling
 
-**File: `src/coreclr/gc/gcpriv.h`**
-- Disable regions for FreeRTOS (similar to illumos note at line 144)
-- Consider enabling `FEATURE_CONSERVATIVE_GC` for initial bring-up
+**New File: `src/coreclr/nativeaot/Runtime/freertos/cgroupcpu.cpp`**
+- Stub implementation (no cgroups on FreeRTOS)
 
-**Memory constraints:**
-- FreeRTOS typically has limited RAM (KB to low MB)
-- Configure small GC heap defaults
-- Consider workstation GC only (no server GC)
+---
 
-## Phase 6: Libraries Exclusions
+## Phase 4: GC Configuration for FreeRTOS
+
+### 4.1 Memory Constraints
+
+FreeRTOS typically has limited RAM (64KB - few MB). Configure GC accordingly.
+
+**File: `src/coreclr/nativeaot/Runtime/gcenv.ee.cpp`**
+- Add FreeRTOS-specific GC configuration
+
+**Recommended settings:**
+```cpp
+#ifdef TARGET_FREERTOS
+// Small heap for embedded
+#define INITIAL_HEAP_SIZE (64 * 1024)      // 64KB initial
+#define MAX_HEAP_SIZE     (256 * 1024)     // 256KB max
+#define GC_SEGMENT_SIZE   (16 * 1024)      // 16KB segments
+#endif
+```
+
+### 4.2 GC Mode
+
+**File: `src/coreclr/gc/gcconfig.h`**
+- Force Workstation GC (no Server GC)
+- Disable concurrent GC initially for simplicity
+- Consider conservative GC for initial bring-up
+
+---
+
+## Phase 5: ARM32 Assembly Stubs
+
+### 5.1 Context Save/Restore
+
+**New File: `src/coreclr/nativeaot/Runtime/arm/AsmMacros_freertos.inc`**
+- ARM32 assembly macros for FreeRTOS
+
+**New File: `src/coreclr/nativeaot/Runtime/arm/GcStubs_freertos.asm`**
+- GC write barriers for ARM32
+
+### 5.2 Exception Handling
+
+**File: `src/coreclr/nativeaot/Runtime/arm/ExceptionHandling.asm`**
+- Verify/adapt for bare-metal ARM
+- Integrate with FreeRTOS exception handlers
+
+---
+
+## Phase 6: Linker Configuration
+
+### 6.1 Linker Script
+
+**New File: `src/coreclr/nativeaot/BuildIntegration/FreeRTOS/link.ld`**
+```ld
+/* FreeRTOS linker script for NativeAOT */
+MEMORY
+{
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K
+    RAM (rwx)   : ORIGIN = 0x20000000, LENGTH = 128K
+}
+
+SECTIONS
+{
+    .text : { *(.text*) } > FLASH
+    .rodata : { *(.rodata*) } > FLASH
+    .data : { *(.data*) } > RAM AT > FLASH
+    .bss : { *(.bss*) } > RAM
+
+    /* .NET specific sections */
+    .managed_code : { *(.managed*) } > FLASH
+    .gc_info : { *(.gc_info*) } > FLASH
+}
+```
+
+### 6.2 Startup Code
+
+**New File: `src/coreclr/nativeaot/Bootstrap/freertos/startup.cpp`**
+```cpp
+// Entry point for FreeRTOS NativeAOT application
+extern "C" void vApplicationStackOverflowHook(TaskHandle_t task, char* name)
+{
+    PalPrintFatalError("Stack overflow");
+}
+
+extern "C" void vApplicationMallocFailedHook()
+{
+    PalPrintFatalError("Malloc failed");
+}
+
+// Called from main() after FreeRTOS scheduler starts
+extern "C" int managed_main(int argc, char* argv[]);
+
+void dotnet_task(void* params)
+{
+    managed_main(0, NULL);
+    vTaskDelete(NULL);
+}
+
+int main()
+{
+    // Initialize hardware
+
+    // Create main .NET task
+    xTaskCreate(dotnet_task, "DotNet",
+                configMINIMAL_STACK_SIZE * 8,
+                NULL, tskIDLE_PRIORITY + 2, NULL);
+
+    // Start scheduler
+    vTaskStartScheduler();
+
+    return 0;
+}
+```
+
+---
+
+## Phase 7: Libraries Subset
+
+### 7.1 Supported Libraries
+
+For FreeRTOS, support a minimal subset:
+
+| Library | Status | Notes |
+|---------|--------|-------|
+| System.Runtime | ✅ | Core types |
+| System.Collections | ✅ | Basic collections |
+| System.Text | ✅ | String handling |
+| System.Threading | ⚠️ | Map to FreeRTOS tasks |
+| System.IO | ❌ | No filesystem by default |
+| System.Net | ❌ | Requires FreeRTOS+TCP |
+| System.Diagnostics.Process | ❌ | No processes |
+
+### 7.2 Test Exclusions
 
 **File: `src/libraries/tests.proj`**
-- Add FreeRTOS exclusions (following illumos pattern at line 136):
 ```xml
 <ItemGroup Condition="'$(TargetOS)' == 'freertos'">
-  <!-- Exclude tests requiring features not available on FreeRTOS -->
-  <ProjectExclusions Include="..." />
+  <ProjectExclusions Include="$(MSBuildThisFileDirectory)System.IO.FileSystem\**\*.csproj" />
+  <ProjectExclusions Include="$(MSBuildThisFileDirectory)System.Net.*\**\*.csproj" />
+  <ProjectExclusions Include="$(MSBuildThisFileDirectory)System.Diagnostics.Process\**\*.csproj" />
 </ItemGroup>
 ```
 
-**Libraries to exclude or stub:**
-- `System.Diagnostics.Process` - No process model
-- `System.IO.FileSystem` - Limited or no filesystem (depends on FreeRTOS config)
-- `System.Net.Sockets` - Requires FreeRTOS+TCP
-- `System.Threading.Thread` - Map to FreeRTOS tasks
+---
 
-## Phase 7: Package Configuration
+## Phase 8: Testing Strategy
 
-**File: `src/coreclr/.nuget/Directory.Build.props`**
-- Add FreeRTOS to supported package OS groups (line ~23):
-```xml
-<SupportedPackageOSGroups>...;freertos</SupportedPackageOSGroups>
+### 8.1 Hardware Targets
+
+Initial targets for testing:
+- **STM32F4** (Cortex-M4, 1MB Flash, 192KB RAM)
+- **STM32F7** (Cortex-M7, 2MB Flash, 512KB RAM)
+- **QEMU ARM** (for CI/automated testing)
+
+### 8.2 Test Application
+
+Create a minimal test application:
+```csharp
+// src/tests/nativeaot/freertos/HelloWorld/Program.cs
+using System;
+
+class Program
+{
+    static void Main()
+    {
+        Console.WriteLine("Hello from .NET on FreeRTOS!");
+
+        int sum = 0;
+        for (int i = 0; i < 100; i++)
+            sum += i;
+
+        Console.WriteLine($"Sum: {sum}");
+    }
+}
 ```
-- Add `freertos-arm` RID (around line 89):
-```xml
-<ItemGroup Condition="$(SupportedPackageOSGroups.Contains(';freertos;'))">
-  <OfficialBuildRID Include="freertos-arm" />
-</ItemGroup>
+
+### 8.3 QEMU Testing
+
+```bash
+# Build for QEMU ARM
+dotnet publish -r freertos-arm -c Release
+
+# Run in QEMU
+qemu-system-arm -M lm3s6965evb -kernel output.elf -nographic
 ```
 
-## Phase 8: Crossgen/AOT
+---
 
-**File: `src/coreclr/crossgen-corelib.proj`**
-- Disable crossgen for FreeRTOS initially (line ~21):
-```xml
-<BuildDll Condition="'$(TargetOS)' == 'freertos'">false</BuildDll>
+## Implementation Timeline
+
+| Week | Phase | Deliverable |
+|------|-------|-------------|
+| 1-2 | Phase 1 | Build system (DONE) |
+| 3-4 | Phase 2 | NativeAOT enabled for FreeRTOS |
+| 5-7 | Phase 3 | PAL implementation |
+| 8-9 | Phase 4 | GC configuration |
+| 10 | Phase 5 | ARM32 assembly stubs |
+| 11 | Phase 6 | Linker/startup code |
+| 12 | Phase 7-8 | Libraries subset + testing |
+
+---
+
+## File Summary
+
+### New Files Required
+```
+src/coreclr/nativeaot/Runtime/freertos/
+├── PalFreeRTOS.cpp           # Main PAL implementation
+├── HardwareExceptions.cpp     # ARM exception handling
+├── cgroupcpu.cpp             # Stub
+└── CMakeLists.txt            # Build config
+
+src/coreclr/nativeaot/Runtime/arm/
+├── AsmMacros_freertos.inc    # Assembly macros
+└── GcStubs_freertos.asm      # GC barriers
+
+src/coreclr/nativeaot/Bootstrap/freertos/
+├── startup.cpp               # Entry point
+└── CMakeLists.txt
+
+src/coreclr/nativeaot/BuildIntegration/FreeRTOS/
+├── link.ld                   # Linker script
+└── Microsoft.NETCore.Native.FreeRTOS.targets
 ```
 
-## Implementation Order
+### Files to Modify
+```
+eng/Subsets.props                          # Enable NativeAOT for FreeRTOS
+src/coreclr/nativeaot/Runtime/Pal.h        # Add TARGET_FREERTOS
+src/coreclr/nativeaot/Runtime/CMakeLists.txt
+src/coreclr/nativeaot/BuildIntegration/Microsoft.NETCore.Native.targets
+src/libraries/tests.proj                   # Test exclusions
+```
 
-1. **Week 1-2:** Build system infrastructure (Phase 1)
-   - All MSBuild/CMake changes
-   - Cross-compilation toolchain setup
-
-2. **Week 3-4:** Mono runtime PAL (Phase 2.1 + Phase 4)
-   - Threading primitives
-   - Memory management
-   - Basic task execution
-
-3. **Week 5-6:** Minimal managed code execution
-   - Hello World execution
-   - Basic type system
-
-4. **Week 7-8:** GC bring-up (Phase 5)
-   - Conservative GC initially
-   - Memory pressure handling
-
-5. **Week 9-12:** Libraries and stabilization (Phase 6)
-   - Core libraries subset
-   - Test coverage
-
-## Key Differences from illumos Port
-
-| Aspect | illumos | FreeRTOS |
-|--------|---------|----------|
-| Type | Unix-like OS | RTOS |
-| Process model | Full processes | Tasks (single address space) |
-| Memory | Virtual memory | Physical memory only |
-| POSIX | Full POSIX | Limited/none |
-| Filesystem | Full | Optional (FatFS, LittleFS) |
-| Networking | BSD sockets | FreeRTOS+TCP |
-| Target runtime | CoreCLR | Mono (interpreter) |
+---
 
 ## Open Questions
 
-1. **FreeRTOS version requirements?** - Minimum FreeRTOS version to support
-2. **Hardware targets?** - Specific ARM32 SoCs/boards to target
-3. **Memory budget?** - Minimum RAM requirements for .NET on FreeRTOS
-4. **Feature subset?** - Which .NET APIs are in scope?
-5. **FreeRTOS+POSIX?** - Use POSIX compatibility layer or native FreeRTOS APIs?
+1. **FreeRTOS version?** - Target FreeRTOS 10.x or 11.x?
+2. **Hardware BSP?** - Which board support packages to include?
+3. **Console output?** - UART? Semihosting? RTT?
+4. **Minimum RAM?** - 128KB? 256KB? 512KB?
+5. **FreeRTOS+TCP?** - Include networking support?
+6. **FreeRTOS+FAT?** - Include filesystem support?
+
+---
 
 ## References
 
-- FreeRTOS documentation: https://www.freertos.org/Documentation/
-- .NET Porting Guide: `docs/design/coreclr/botr/guide-for-porting.md`
-- Mono embedded: https://www.mono-project.com/docs/advanced/embedding/
-- ARM32 ABI: `docs/design/coreclr/botr/clr-abi.md`
+- NativeAOT Runtime: `src/coreclr/nativeaot/Runtime/`
+- NativeAOT PAL (Unix): `src/coreclr/nativeaot/Runtime/unix/PalUnix.cpp`
+- NativeAOT PAL (Windows): `src/coreclr/nativeaot/Runtime/windows/PalMinWin.cpp`
+- FreeRTOS API: https://www.freertos.org/a00106.html
+- ARM Cortex-M: https://developer.arm.com/documentation
