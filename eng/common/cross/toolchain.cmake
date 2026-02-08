@@ -3,6 +3,7 @@ set(CROSS_ROOTFS $ENV{ROOTFS_DIR})
 # reset platform variables (e.g. cmake 3.25 sets LINUX=1)
 unset(LINUX)
 unset(FREEBSD)
+unset(FREERTOS)
 unset(ILLUMOS)
 unset(ANDROID)
 unset(TIZEN)
@@ -18,6 +19,9 @@ elseif(EXISTS ${CROSS_ROOTFS}/usr/platform/i86pc)
 elseif(EXISTS ${CROSS_ROOTFS}/boot/system/develop/headers/config/HaikuConfig.h)
   set(CMAKE_SYSTEM_NAME Haiku)
   set(HAIKU 1)
+elseif(EXISTS ${CROSS_ROOTFS}/FreeRTOS OR EXISTS ${CROSS_ROOTFS}/freertos OR EXISTS ${CROSS_ROOTFS}/include/FreeRTOS.h)
+  set(CMAKE_SYSTEM_NAME Generic)
+  set(FREERTOS 1)
 else()
   set(CMAKE_SYSTEM_NAME Linux)
   set(LINUX 1)
@@ -32,7 +36,10 @@ endif()
 
 if(TARGET_ARCH_NAME STREQUAL "arm")
   set(CMAKE_SYSTEM_PROCESSOR armv7l)
-  if(EXISTS ${CROSS_ROOTFS}/usr/lib/gcc/armv7-alpine-linux-musleabihf)
+  if(FREERTOS)
+    # FreeRTOS uses arm-none-eabi toolchain for bare-metal ARM
+    set(TOOLCHAIN "arm-none-eabi")
+  elseif(EXISTS ${CROSS_ROOTFS}/usr/lib/gcc/armv7-alpine-linux-musleabihf)
     set(TOOLCHAIN "armv7-alpine-linux-musleabihf")
   elseif(EXISTS ${CROSS_ROOTFS}/usr/lib/gcc/armv6-alpine-linux-musleabihf)
     set(TOOLCHAIN "armv6-alpine-linux-musleabihf")
@@ -224,6 +231,19 @@ elseif(HAIKU)
 
     # let CMake set up the correct search paths
     include(Platform/Haiku)
+elseif(FREERTOS)
+    # FreeRTOS cross-compilation setup for bare-metal ARM
+    set(CMAKE_SYSROOT "${CROSS_ROOTFS}")
+    set(CMAKE_SYSTEM_PREFIX_PATH "${CROSS_ROOTFS}")
+
+    # Use arm-none-eabi toolchain
+    locate_toolchain_exec(gcc CMAKE_C_COMPILER)
+    locate_toolchain_exec(g++ CMAKE_CXX_COMPILER)
+
+    # Bare-metal ARM compilation flags
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -specs=nosys.specs -specs=nano.specs")
 else()
     set(CMAKE_SYSROOT "${CROSS_ROOTFS}")
 
@@ -287,11 +307,15 @@ elseif(ILLUMOS)
 elseif(HAIKU)
   add_toolchain_linker_flag("-lnetwork")
   add_toolchain_linker_flag("-lroot")
+elseif(FREERTOS)
+  # FreeRTOS linker flags for bare-metal
+  add_toolchain_linker_flag("-L${CROSS_ROOTFS}/lib")
+  add_toolchain_linker_flag("-nostartfiles")
 endif()
 
 # Specify compile options
 
-if((TARGET_ARCH_NAME MATCHES "^(arm|arm64|armel|armv6|loongarch64|ppc64le|riscv64|s390x|x64|x86)$" AND NOT ANDROID AND NOT FREEBSD) OR ILLUMOS OR HAIKU)
+if((TARGET_ARCH_NAME MATCHES "^(arm|arm64|armel|armv6|loongarch64|ppc64le|riscv64|s390x|x64|x86)$" AND NOT ANDROID AND NOT FREEBSD) OR ILLUMOS OR HAIKU OR FREERTOS)
   set(CMAKE_C_COMPILER_TARGET ${TOOLCHAIN})
   set(CMAKE_CXX_COMPILER_TARGET ${TOOLCHAIN})
   set(CMAKE_ASM_COMPILER_TARGET ${TOOLCHAIN})

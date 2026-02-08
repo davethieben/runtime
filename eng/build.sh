@@ -31,8 +31,8 @@ usage()
   echo "  --librariesConfiguration (-lc)  Libraries build configuration: Debug or Release."
   echo "                                  [Default: Debug]"
   echo "  --os                            Target operating system: windows, linux, freebsd, osx, maccatalyst, tvos,"
-  echo "                                  tvossimulator, ios, iossimulator, android, browser, wasi, netbsd, illumos, solaris"
-  echo "                                  linux-musl, linux-bionic, tizen, or haiku."
+  echo "                                  tvossimulator, ios, iossimulator, android, browser, wasi, netbsd, illumos, solaris,"
+  echo "                                  freertos, linux-musl, linux-bionic, tizen, or haiku."
   echo "                                  [Default: Your machine's OS.]"
   echo "  --targetrid <rid>               Optional argument that overrides the target rid name."
   echo "  --projects <value>              Project or solution file(s) to build."
@@ -292,6 +292,8 @@ while [[ $# > 0 ]]; do
           os="illumos" ;;
         solaris)
           os="solaris" ;;
+        freertos)
+          os="freertos" ;;
         linux-bionic)
           os="linux"
           __PortableTargetOS=linux-bionic

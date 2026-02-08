@@ -219,6 +219,13 @@ if(CLR_CMAKE_HOST_OS STREQUAL haiku)
     set(CLR_CMAKE_HOST_HAIKU 1)
 endif(CLR_CMAKE_HOST_OS STREQUAL haiku)
 
+if(CLR_CMAKE_HOST_OS STREQUAL freertos)
+    # FreeRTOS is an RTOS, not Unix-like - no CLR_CMAKE_HOST_UNIX
+    set(CLR_CMAKE_HOST_FREERTOS 1)
+    # FreeRTOS on ARM32
+    set(CLR_CMAKE_HOST_FREERTOS_ARM 1)
+endif(CLR_CMAKE_HOST_OS STREQUAL freertos)
+
 if(CLR_CMAKE_HOST_OS STREQUAL windows)
     set(CLR_CMAKE_HOST_WIN32 1)
 endif(CLR_CMAKE_HOST_OS STREQUAL windows)
@@ -433,6 +440,11 @@ if(CLR_CMAKE_TARGET_OS STREQUAL haiku)
     set(CLR_CMAKE_TARGET_UNIX 1)
     set(CLR_CMAKE_TARGET_HAIKU 1)
 endif(CLR_CMAKE_TARGET_OS STREQUAL haiku)
+
+if(CLR_CMAKE_TARGET_OS STREQUAL freertos)
+    # FreeRTOS is an RTOS - not Unix-like, no virtual memory, single address space
+    set(CLR_CMAKE_TARGET_FREERTOS 1)
+endif(CLR_CMAKE_TARGET_OS STREQUAL freertos)
 
 if(CLR_CMAKE_TARGET_OS STREQUAL emscripten OR CLR_CMAKE_TARGET_OS STREQUAL browser)
     set(CLR_CMAKE_TARGET_UNIX 1)

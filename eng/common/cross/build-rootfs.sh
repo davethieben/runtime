@@ -10,7 +10,8 @@ usage()
     echo "                               for alpine can be specified with version: alpineX.YY or alpineedge"
     echo "                               for FreeBSD can be: freebsd13, freebsd14"
     echo "                               for illumos can be: illumos"
-    echo "                               for Haiku can be: haiku."
+    echo "                               for Haiku can be: haiku"
+    echo "                               for FreeRTOS can be: freertos"
     echo "lldbx.y - optional, LLDB version, can be: lldb3.9(default), lldb4.0, lldb5.0, lldb6.0 no-lldb. Ignored for alpine and FreeBSD"
     echo "llvmx[.y] - optional, LLVM version for LLVM related packages."
     echo "--skipunmount - optional, will skip the unmount of rootfs folder."
@@ -29,6 +30,7 @@ __FreeBSDArch=arm
 __FreeBSDMachineArch=armv7
 __IllumosArch=arm7
 __HaikuArch=arm
+__FreertosArch=arm
 __QEMUArch=arm
 __UbuntuArch=armhf
 __UbuntuRepo=
@@ -237,6 +239,7 @@ while :; do
             __FreeBSDMachineArch=amd64
             __illumosArch=x86_64
             __HaikuArch=x86_64
+            __FreertosArch=x86_64
             __UbuntuRepo="http://archive.ubuntu.com/ubuntu/"
             ;;
         x86)
@@ -393,6 +396,10 @@ while :; do
             ;;
         haiku)
             __CodeName=haiku
+            __SkipUnmount=1
+            ;;
+        freertos)
+            __CodeName=freertos
             __SkipUnmount=1
             ;;
         --skipunmount)
@@ -756,6 +763,39 @@ elif [[ "$__CodeName" == "haiku" ]]; then
     echo "Cleaning up temporary files"
     popd
     rm -rf "$__RootfsDir/tmp"
+elif [[ "$__CodeName" == "freertos" ]]; then
+    echo "Building FreeRTOS sysroot for $__FreertosArch"
+    mkdir -p "$__RootfsDir"
+    pushd "$__RootfsDir"
+
+    ensureDownloadTool
+
+    # FreeRTOS requires the FreeRTOS kernel and arm-none-eabi toolchain
+    # The user should have arm-none-eabi-gcc installed on the host system
+
+    echo "Downloading FreeRTOS kernel..."
+    __FreertosVersion="V11.1.0"
+    if [[ "$__hasWget" == 1 ]]; then
+        wget -O freertos.zip "https://github.com/FreeRTOS/FreeRTOS-Kernel/archive/refs/tags/${__FreertosVersion}.zip"
+    else
+        curl -SLo freertos.zip "https://github.com/FreeRTOS/FreeRTOS-Kernel/archive/refs/tags/${__FreertosVersion}.zip"
+    fi
+    unzip -o freertos.zip
+    mv "FreeRTOS-Kernel-${__FreertosVersion#V}" freertos
+    rm freertos.zip
+
+    # Create standard directory structure
+    mkdir -p include lib
+
+    # Copy FreeRTOS headers
+    cp -r freertos/include/* include/
+
+    # Create a marker file for detection
+    touch "$__RootfsDir/include/FreeRTOS.h"
+
+    echo "FreeRTOS sysroot setup complete at $__RootfsDir"
+    echo "Note: Ensure arm-none-eabi-gcc toolchain is installed on host system"
+    popd
 elif [[ -n "$__CodeName" ]]; then
     __Suites="$__CodeName $(for suite in $__UbuntuSuites; do echo -n "$__CodeName-$suite "; done)"
 

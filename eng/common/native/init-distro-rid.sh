@@ -52,6 +52,8 @@ getNonPortableDistroRid()
     elif [ "$targetOs" = "haiku" ]; then
         __uname_release="$(uname -r)"
         nonPortableRid=haiku.r"$__uname_release"-"$targetArch"
+    elif [ "$targetOs" = "freertos" ]; then
+        nonPortableRid="freertos-${targetArch}"
     fi
 
     echo "$nonPortableRid" | tr '[:upper:]' '[:lower:]'
