@@ -82,7 +82,7 @@ include_directories(${GC_DIR}/env)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/eventpipe/inc)
 include_directories(${RUNTIME_DIR})
 
-if (WIN32)
+if (CLR_CMAKE_TARGET_WIN32)
   set(GC_HEADERS
     ${GC_DIR}/env/common.h
     ${GC_DIR}/env/etmdummy.h
@@ -130,7 +130,32 @@ if (WIN32)
   list(APPEND FULL_RUNTIME_SOURCES windows/CoffNativeCodeManager.cpp)
 
   set(ASM_SUFFIX asm)
+elseif(CLR_CMAKE_TARGET_FREERTOS)
+  # FreeRTOS (bare-metal RTOS) configuration
+  # PAL implementation will be in freertos/ subdirectory
+
+  include_directories(freertos)
+
+  # sal.h, pshpack/poppack.h
+  include_directories(../../pal/inc/rt)
+
+  # FreeRTOS-specific sources (to be implemented in Phase 3)
+  # For now, we'll use placeholder that will need to be created
+  list(APPEND COMMON_RUNTIME_SOURCES
+    # freertos/PalFreeRTOS.cpp  # To be implemented
+  )
+
+  list(APPEND FULL_RUNTIME_SOURCES
+    # freertos/HardwareExceptions.cpp  # To be implemented
+  )
+
+  set(ASM_SUFFIX S)
+
+  # FreeRTOS doesn't use libunwind - exception handling is different on bare-metal
+  add_definitions(-DFEATURE_NATIVEAOT_FREERTOS=1)
+
 else()
+  # Unix (Linux, macOS, FreeBSD, etc.)
 
   include_directories(unix)
 
@@ -280,12 +305,15 @@ if(CLR_CMAKE_TARGET_WIN32)
   if (CLR_CMAKE_TARGET_ARCH_I386)
     add_compile_options($<$<COMPILE_LANGUAGE:ASM_MASM>:/safeseh>)
   endif()
-else()
+elseif(CLR_CMAKE_TARGET_UNIX)
   if(NOT CLR_CMAKE_TARGET_APPLE AND NOT CLR_CMAKE_TARGET_ARCH_WASM)
     add_definitions(-DFEATURE_READONLY_GS_COOKIE)
   endif()
   include(unix/configure.cmake)
   include_directories(${CMAKE_CURRENT_BINARY_DIR})
+elseif(CLR_CMAKE_TARGET_FREERTOS)
+  # FreeRTOS doesn't need unix/configure.cmake
+  # Bare-metal RTOS with no Unix compatibility layer
 endif()
 
 if (CLR_CMAKE_TARGET_UNIX)

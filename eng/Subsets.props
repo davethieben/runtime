@@ -48,7 +48,8 @@
     <MonoAOTCrossCompilerSupported Condition="'$(_MonoAotCrossSupportedOS)' == 'true' and '$(_MonoAotCrossSupportedArch)' == 'true'">true</MonoAOTCrossCompilerSupported>
 
     <!-- Determine if the NativeAOT runtime can run on the specified target. -->
-    <_NativeAotSupportedOS Condition="'$(TargetOS)' != 'browser' and '$(TargetOS)' != 'freertos' and '$(TargetOS)' != 'haiku' and '$(TargetOS)' != 'illumos' and '$(TargetOS)' != 'netbsd' and '$(TargetOS)' != 'solaris'">true</_NativeAotSupportedOS>
+    <!-- FreeRTOS supports NativeAOT (it's the only supported runtime for FreeRTOS) -->
+    <_NativeAotSupportedOS Condition="'$(TargetOS)' != 'browser' and '$(TargetOS)' != 'haiku' and '$(TargetOS)' != 'illumos' and '$(TargetOS)' != 'netbsd' and '$(TargetOS)' != 'solaris'">true</_NativeAotSupportedOS>
     <_NativeAotSupportedArch Condition="'$(TargetArchitecture)' == 'x64' or '$(TargetArchitecture)' == 'arm64' or '$(TargetArchitecture)' == 'arm' or '$(TargetArchitecture)' == 'loongarch64' or '$(TargetArchitecture)' == 'riscv64' or ('$(TargetOS)' == 'windows' and '$(TargetArchitecture)' == 'x86')">true</_NativeAotSupportedArch>
     <NativeAotSupported Condition="'$(_NativeAotSupportedOS)' == 'true' and '$(_NativeAotSupportedArch)' == 'true'">true</NativeAotSupported>
 
@@ -76,6 +77,8 @@
     <DefaultSubsets Condition="'$(TargetsAppleMobile)' == 'true'">clr.nativeaotruntime+clr.nativeaotlibs+mono+libs+packs</DefaultSubsets>
     <DefaultSubsets Condition="'$(TargetsLinuxBionic)' == 'true' and '$(MonoSupported)' == 'true'">clr.nativeaotruntime+clr.nativeaotlibs+mono+libs+host+packs</DefaultSubsets>
     <DefaultSubsets Condition="'$(TargetsLinuxBionic)' == 'true' and '$(MonoSupported)' != 'true'">clr.nativeaotruntime+clr.nativeaotlibs+libs+packs</DefaultSubsets>
+    <!-- FreeRTOS only supports NativeAOT - no CoreCLR, no Mono, no host -->
+    <DefaultSubsets Condition="'$(TargetsFreertos)' == 'true'">clr.nativeaotruntime+clr.nativeaotlibs+libs</DefaultSubsets>
     <!-- In source build, mono is only supported as primary runtime flavor. -->
     <DefaultSubsets Condition="'$(DotNetBuildSourceOnly)' == 'true' and '$(PrimaryRuntimeFlavor)' != 'Mono'">clr+libs+tools+host+packs</DefaultSubsets>
     <DefaultSubsets Condition="'$(DotNetBuildMonoCrossAOT)' == 'true'">mono+packs</DefaultSubsets>

@@ -1,0 +1,120 @@
+<!--
+***********************************************************************************************
+Microsoft.NETCore.Native.FreeRTOS.targets
+
+WARNING:  DO NOT MODIFY this file unless you are knowledgeable about MSBuild and have
+          created a backup copy.  Incorrect changes to this file will make it
+          impossible to load or build your projects from the command-line or the IDE.
+
+This file defines the steps in the build process specific for native AOT compilation on FreeRTOS.
+
+Licensed to the .NET Foundation under one or more agreements.
+The .NET Foundation licenses this file to you under the MIT license.
+***********************************************************************************************
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- FreeRTOS uses arm-none-eabi toolchain for bare-metal ARM -->
+    <CppCompilerAndLinker Condition="'$(CppCompilerAndLinker)' == ''">arm-none-eabi-gcc</CppCompilerAndLinker>
+    <CppLinker>$(CppCompilerAndLinker)</CppLinker>
+    <CppLibCreator>arm-none-eabi-ar</CppLibCreator>
+    <ObjCopyName>arm-none-eabi-objcopy</ObjCopyName>
+
+    <!-- FreeRTOS-specific settings -->
+    <_IsFreeRTOS>true</_IsFreeRTOS>
+
+    <!-- Disable features not available on FreeRTOS -->
+    <EventSourceSupport Condition="'$(EventSourceSupport)' == ''">false</EventSourceSupport>
+    <UseSystemZlib>false</UseSystemZlib>
+    <UseSystemBrotli>false</UseSystemBrotli>
+  </PropertyGroup>
+
+  <Target Name="SetupOSSpecificProps" DependsOnTargets="$(IlcDynamicBuildPropertyDependencies)">
+
+    <PropertyGroup>
+      <FullRuntimeName>libRuntime.WorkstationGC</FullRuntimeName>
+
+      <!-- FreeRTOS cross-compilation settings -->
+      <TargetTriple>arm-none-eabi</TargetTriple>
+
+      <EventPipeName>libeventpipe-disabled</EventPipeName>
+      <VxSortSupportName>libRuntime.VxsortDisabled</VxSortSupportName>
+      <StandaloneGCSupportName>libstandalonegc-disabled</StandaloneGCSupportName>
+    </PropertyGroup>
+
+    <!-- FreeRTOS does not use the standard .NET native libraries -->
+    <!-- These require POSIX APIs not available on FreeRTOS -->
+    <ItemGroup>
+      <!-- No NetCoreAppNativeLibrary items for FreeRTOS -->
+      <!-- System.Native, System.Globalization.Native, etc. are not supported -->
+    </ItemGroup>
+
+    <ItemGroup>
+      <NativeLibrary Condition="'$(NativeLib)' == '' and '$(CustomNativeMain)' != 'true'" Include="$(IlcSdkPath)libbootstrapper.o" />
+      <NativeLibrary Condition="'$(NativeLib)' != '' or '$(CustomNativeMain)' == 'true'" Include="$(IlcSdkPath)libbootstrapperdll.o" />
+      <NativeLibrary Include="$(IlcSdkPath)$(FullRuntimeName).a" />
+      <NativeLibrary Include="$(IlcSdkPath)$(EventPipeName)$(LibFileExt)" />
+      <NativeLibrary Include="$(IlcSdkPath)$(StandaloneGCSupportName)$(LibFileExt)" />
+    </ItemGroup>
+
+    <!-- FreeRTOS linker arguments -->
+    <ItemGroup>
+      <!-- Bare-metal ARM flags -->
+      <LinkerArg Include="-mcpu=$(FreertosCpuType)" Condition="'$(FreertosCpuType)' != ''" />
+      <LinkerArg Include="-mcpu=cortex-m4" Condition="'$(FreertosCpuType)' == ''" />
+      <LinkerArg Include="-mthumb" />
+      <LinkerArg Include="-mfloat-abi=hard" Condition="'$(FreertosFloatAbi)' == '' or '$(FreertosFloatAbi)' == 'hard'" />
+      <LinkerArg Include="-mfloat-abi=soft" Condition="'$(FreertosFloatAbi)' == 'soft'" />
+      <LinkerArg Include="-mfpu=fpv4-sp-d16" Condition="'$(FreertosFpu)' == '' or '$(FreertosFpu)' == 'fpv4-sp-d16'" />
+
+      <!-- Bare-metal linker flags -->
+      <LinkerArg Include="-nostartfiles" />
+      <LinkerArg Include="-specs=nosys.specs" />
+      <LinkerArg Include="-specs=nano.specs" Condition="'$(FreertosUseNanoLibs)' != 'false'" />
+
+      <!-- Link the native libraries -->
+      <LinkerArg Include="@(NativeLibrary)" />
+
+      <!-- Custom linker script -->
+      <LinkerArg Include="-T&quot;$(FreertosLinkerScript)&quot;" Condition="'$(FreertosLinkerScript)' != ''" />
+
+      <!-- FreeRTOS libraries (user must provide path) -->
+      <LinkerArg Include="-L&quot;$(FreertosLibPath)&quot;" Condition="'$(FreertosLibPath)' != ''" />
+      <LinkerArg Include="-lfreertos" Condition="'$(FreertosLibPath)' != ''" />
+
+      <!-- Standard embedded libraries -->
+      <LinkerArg Include="-lm" />
+      <LinkerArg Include="-lc" />
+      <LinkerArg Include="-lgcc" />
+
+      <!-- Debug symbols -->
+      <LinkerArg Include="-g" Condition="$(NativeDebugSymbols) == 'true'" />
+
+      <!-- Output format -->
+      <LinkerArg Include="-Wl,--gc-sections" />
+      <LinkerArg Include="-Wl,-Map=&quot;$(NativeIntermediateOutputPath)$(TargetName).map&quot;" />
+    </ItemGroup>
+
+    <!-- Verify toolchain is available -->
+    <PropertyGroup>
+      <_CommandProbe>command -v</_CommandProbe>
+      <_CommandProbe Condition="$([MSBuild]::IsOSPlatform('Windows'))">where /Q</_CommandProbe>
+    </PropertyGroup>
+
+    <Exec Command="$(_CommandProbe) &quot;$(CppLinker)&quot;" IgnoreExitCode="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ExitCode" PropertyName="_WhereLinker" />
+    </Exec>
+
+    <Error Condition="'$(_WhereLinker)' != '0'"
+      Text="FreeRTOS toolchain ('$(CppLinker)') not found in PATH. Install the ARM Embedded Toolchain (arm-none-eabi-gcc) and ensure it's in your PATH." />
+
+  </Target>
+
+  <!-- FreeRTOS-specific post-link step to generate binary/hex files -->
+  <Target Name="GenerateFreeRTOSBinaryFiles" AfterTargets="LinkNative" Condition="'$(GenerateBinaryFile)' == 'true' or '$(GenerateHexFile)' == 'true'">
+    <Exec Command="$(ObjCopyName) -O binary &quot;$(NativeBinary)&quot; &quot;$(NativeOutputPath)$(TargetName).bin&quot;"
+          Condition="'$(GenerateBinaryFile)' == 'true'" />
+    <Exec Command="$(ObjCopyName) -O ihex &quot;$(NativeBinary)&quot; &quot;$(NativeOutputPath)$(TargetName).hex&quot;"
+          Condition="'$(GenerateHexFile)' == 'true'" />
+  </Target>
+</Project>
