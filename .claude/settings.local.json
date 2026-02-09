@@ -6,7 +6,8 @@
       "Bash(find:*)",
       "Bash(if not exist \"C:\\\\dotnet\\\\runtime\\\\.claude\\\\plans\" mkdir \"C:\\\\dotnet\\\\runtime\\\\.claude\\\\plans\")",
       "Bash(./build.cmd:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(grep:*)"
     ]
   }
 }

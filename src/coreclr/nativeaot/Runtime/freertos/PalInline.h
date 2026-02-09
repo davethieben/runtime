@@ -140,3 +140,6 @@ FORCEINLINE int32_t PalOsPageSize()
     // but return a reasonable default for memory alignment
     return 0x1000; // 4KB
 }
+
+// Memory barrier macro for ARM - used by GC and other runtime code
+#define MemoryBarrier() PalMemoryBarrier()

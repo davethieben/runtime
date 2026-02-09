@@ -13,6 +13,69 @@ Abstract:
 #ifndef __PALRT_H__
 #define __PALRT_H__
 
+// FreeRTOS: Define basic Windows types needed throughout this header
+#if defined(TARGET_FREERTOS) && !defined(ULONG)
+#include <stdint.h>
+typedef uint32_t ULONG;
+typedef uint16_t USHORT;
+typedef int16_t SHORT;
+typedef uint32_t DWORD;
+typedef int32_t LONG;
+typedef uint64_t ULONGLONG;
+typedef uint64_t ULONG64;
+typedef uint8_t UCHAR;
+typedef uint8_t BOOLEAN;
+typedef char CHAR;
+typedef uint16_t UINT16;
+typedef uint32_t UINT32;
+typedef uint16_t WORD;
+typedef uint64_t DWORD64;
+typedef void* PVOID;
+typedef void* LPVOID;
+typedef DWORD* PDWORD;
+
+// Thread function pointer type
+typedef DWORD (*LPTHREAD_START_ROUTINE)(LPVOID lpThreadParameter);
+#ifndef WCHAR
+typedef char16_t WCHAR;
+#endif
+
+// Forward declarations for exception handling structures (full definitions later in file)
+struct _EXCEPTION_RECORD;
+typedef struct _EXCEPTION_RECORD EXCEPTION_RECORD, *PEXCEPTION_RECORD;
+struct _RUNTIME_FUNCTION;
+typedef struct _RUNTIME_FUNCTION RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
+
+typedef enum _EXCEPTION_DISPOSITION {
+    ExceptionContinueExecution,
+    ExceptionContinueSearch,
+    ExceptionNestedException,
+    ExceptionCollidedUnwind
+} EXCEPTION_DISPOSITION;
+
+typedef EXCEPTION_DISPOSITION (*PEXCEPTION_ROUTINE)(
+    PEXCEPTION_RECORD ExceptionRecord,
+    PVOID EstablisherFrame,
+    PVOID ContextRecord,
+    PVOID DispatcherContext
+);
+#ifndef WINAPI
+#define WINAPI
+#endif
+#ifndef UNALIGNED
+#define UNALIGNED
+#endif
+#ifndef IN
+#define IN
+#endif
+#ifndef OUT
+#define OUT
+#endif
+#ifndef EXCEPTION_MAXIMUM_PARAMETERS
+#define EXCEPTION_MAXIMUM_PARAMETERS 15
+#endif
+#endif // TARGET_FREERTOS && !ULONG
+
 /******************* HRESULTs *********************************************/
 
 #ifdef RC_INVOKED

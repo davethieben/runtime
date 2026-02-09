@@ -19,7 +19,7 @@
 #include <stdarg.h>
 #ifdef HOST_WINDOWS
 #include <windows.h>
-#else
+#elif !defined(TARGET_FREERTOS)
 #include <pthread.h>
 #endif
 
@@ -59,18 +59,20 @@
 
 #endif // !_MSC_VER
 
-#ifdef TARGET_UNIX
+#if defined(TARGET_UNIX) || defined(TARGET_FREERTOS)
 #define DIRECTORY_SEPARATOR_CHAR '/'
-#else // TARGET_UNIX
+#else
 #define DIRECTORY_SEPARATOR_CHAR '\\'
-#endif // TARGET_UNIX
+#endif
 
-#ifdef TARGET_UNIX
+#if defined(TARGET_UNIX) || defined(TARGET_FREERTOS)
 typedef int32_t             HRESULT;
 
 #define S_OK  0x0
 #define E_FAIL 0x80004005
 #define E_OUTOFMEMORY 0x8007000E
+#define FAILED(hr) ((HRESULT)(hr) < 0)
+#define SUCCEEDED(hr) ((HRESULT)(hr) >= 0)
 
 typedef WCHAR *             LPWSTR;
 typedef const WCHAR *       LPCWSTR;
@@ -100,27 +102,27 @@ typedef struct _EXCEPTION_RECORD EXCEPTION_RECORD, *PEXCEPTION_RECORD;
 #define STATUS_ACCESS_VIOLATION                        ((uint32_t   )0xC0000005L)
 #define STATUS_STACK_OVERFLOW                          ((uint32_t   )0xC00000FDL)
 
-#endif // TARGET_UNIX
+#endif // TARGET_UNIX || TARGET_FREERTOS
 
 #define STATUS_NATIVEAOT_NULL_REFERENCE                  ((uint32_t   )0x00000000L)
 #define STATUS_NATIVEAOT_UNMANAGED_HELPER_NULL_REFERENCE ((uint32_t   )0x00000042L)
 
-#ifdef TARGET_UNIX
+#if defined(TARGET_UNIX) || defined(TARGET_FREERTOS)
 #define NULL_AREA_SIZE                   (4*1024)
 #else
 #define NULL_AREA_SIZE                   (64*1024)
 #endif
 
-#ifdef TARGET_UNIX
+#if defined(TARGET_UNIX) || defined(TARGET_FREERTOS)
 #define _T(s) s
 typedef char TCHAR;
 #else
 // Avoid including tchar.h on Windows.
 #define _T(s) L ## s
-#endif // TARGET_UNIX
+#endif
 
 #ifndef DACCESS_COMPILE
-#ifdef TARGET_UNIX
+#if defined(TARGET_UNIX) || defined(TARGET_FREERTOS)
 
 #ifndef TRUE
 #define TRUE                    1
@@ -149,7 +151,7 @@ typedef char TCHAR;
 #define WAIT_TIMEOUT            258
 #define WAIT_FAILED             0xFFFFFFFF
 
-#endif // TARGET_UNIX
+#endif // TARGET_UNIX || TARGET_FREERTOS
 #endif // !DACCESS_COMPILE
 
 extern uint32_t g_RhNumberOfProcessors;

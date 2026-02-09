@@ -6,13 +6,17 @@
 
 #include <stdbool.h>
 
-#ifdef HOST_WINDOWS
+#if defined(TARGET_FREERTOS)
+// FreeRTOS bare-metal: Use a simple placeholder for now
+// In a full implementation, this would be SemaphoreHandle_t or similar
+typedef struct { int placeholder; } MINIPAL_MUTEX_IMPL;
+#elif defined(HOST_WINDOWS)
 #include <windows.h>
 typedef CRITICAL_SECTION MINIPAL_MUTEX_IMPL;
-#else // !HOST_WINDOWS
+#else // Unix-like
 #include <pthread.h>
 typedef pthread_mutex_t MINIPAL_MUTEX_IMPL;
-#endif // HOST_WINDOWS
+#endif
 
 #ifdef __cplusplus
 extern "C"

@@ -201,4 +201,10 @@ namespace ETW
 #include "etmdummy.h"
 #endif // FEATURE_EVENT_TRACE
 
+// For FreeRTOS, always use etmdummy.h stub implementations
+// even if FEATURE_EVENT_TRACE is defined (bare-metal has no ETW)
+#ifdef TARGET_FREERTOS
+#include "etmdummy.h"
+#endif
+
 #endif // EVENTTRACEBASE_H

@@ -1,12 +1,6 @@
 set(GC_DIR ../../gc)
 set(RUNTIME_DIR ../../runtime)
 
-# Disable perftracing for FreeRTOS (bare-metal embedded system with limited resources)
-if(CLR_CMAKE_TARGET_FREERTOS)
-  set(FEATURE_PERFTRACING 0)
-  set(FEATURE_EVENT_TRACE 0)
-endif()
-
 set(COMMON_RUNTIME_SOURCES
     allocheap.cpp
     rhassert.cpp
@@ -151,14 +145,13 @@ elseif(CLR_CMAKE_TARGET_FREERTOS)
   # safemath.h and other core headers
   include_directories(../../inc)
 
-  # FreeRTOS-specific sources (to be implemented in Phase 3)
-  # For now, we'll use placeholder that will need to be created
+  # FreeRTOS-specific sources
   list(APPEND COMMON_RUNTIME_SOURCES
-    # freertos/PalFreeRTOS.cpp  # To be implemented
+    freertos/PalFreeRTOS.cpp
   )
 
   list(APPEND FULL_RUNTIME_SOURCES
-    # freertos/HardwareExceptions.cpp  # To be implemented
+    # Hardware exceptions for FreeRTOS will be added later
   )
 
   set(ASM_SUFFIX S)
@@ -359,6 +352,7 @@ else()
   add_subdirectory(Portable)
 endif()
 
-if(FEATURE_PERFTRACING)
+# FreeRTOS is a bare-metal embedded system - skip eventpipe/perftracing
+if(FEATURE_PERFTRACING AND NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory(eventpipe)
 endif()
