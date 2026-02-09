@@ -1,6 +1,12 @@
 set(GC_DIR ../../gc)
 set(RUNTIME_DIR ../../runtime)
 
+# Disable perftracing for FreeRTOS (bare-metal embedded system with limited resources)
+if(CLR_CMAKE_TARGET_FREERTOS)
+  set(FEATURE_PERFTRACING 0)
+  set(FEATURE_EVENT_TRACE 0)
+endif()
+
 set(COMMON_RUNTIME_SOURCES
     allocheap.cpp
     rhassert.cpp
@@ -138,6 +144,12 @@ elseif(CLR_CMAKE_TARGET_FREERTOS)
 
   # sal.h, pshpack/poppack.h
   include_directories(../../pal/inc/rt)
+
+  # pal_assert.h and other PAL headers
+  include_directories(../../pal/inc)
+
+  # safemath.h and other core headers
+  include_directories(../../inc)
 
   # FreeRTOS-specific sources (to be implemented in Phase 3)
   # For now, we'll use placeholder that will need to be created

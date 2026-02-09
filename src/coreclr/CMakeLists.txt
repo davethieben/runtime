@@ -123,7 +123,7 @@ endif()
 #----------------------------------------------------
 # Build the test watchdog alongside the CLR
 #----------------------------------------------------
-if(NOT CLR_CMAKE_HOST_MACCATALYST AND NOT CLR_CMAKE_HOST_IOS AND NOT CLR_CMAKE_HOST_TVOS)
+if(NOT CLR_CMAKE_HOST_MACCATALYST AND NOT CLR_CMAKE_HOST_IOS AND NOT CLR_CMAKE_HOST_TVOS AND NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory("${CLR_SRC_NATIVE_DIR}/watchdog" test-watchdog)
 endif()
 
@@ -153,9 +153,9 @@ endif()
 include_directories("pal/prebuilt/inc")
 include_directories(${CLR_ARTIFACTS_OBJ_DIR})
 
-if (NOT CLR_CMAKE_TARGET_BROWSER)
+if (NOT CLR_CMAKE_TARGET_BROWSER AND NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory(tools/aot/jitinterface)
-endif (NOT CLR_CMAKE_TARGET_BROWSER)
+endif (NOT CLR_CMAKE_TARGET_BROWSER AND NOT CLR_CMAKE_TARGET_FREERTOS)
 
 if(NOT CLR_CROSS_COMPONENTS_BUILD)
   # NativeAOT only buildable for a subset of CoreCLR-supported configurations
@@ -188,7 +188,9 @@ if(FEATURE_STANDALONE_GC)
   add_definitions(-DFEATURE_STANDALONE_GC)
 endif(FEATURE_STANDALONE_GC)
 
-add_subdirectory(gc)
+if (NOT CLR_CMAKE_TARGET_FREERTOS)
+  add_subdirectory(gc)
+endif()
 
 if (CLR_CMAKE_HOST_UNIX)
   include_directories("pal/inc")
@@ -283,36 +285,38 @@ endif(CLR_CMAKE_HOST_UNIX)
 add_subdirectory(utilcode)
 add_subdirectory(inc)
 
-if (CLR_CMAKE_BUILD_TOOLS)
+if (CLR_CMAKE_BUILD_TOOLS AND NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory(ilasm)
   add_subdirectory(ildasm)
-endif(CLR_CMAKE_BUILD_TOOLS)
-add_subdirectory(gcinfo)
+endif(CLR_CMAKE_BUILD_TOOLS AND NOT CLR_CMAKE_TARGET_FREERTOS)
+if (NOT CLR_CMAKE_TARGET_FREERTOS)
+  add_subdirectory(gcinfo)
 
-if (NOT CLR_CMAKE_TARGET_ARCH_WASM)
-  add_subdirectory(jit)
+  if (NOT CLR_CMAKE_TARGET_ARCH_WASM)
+    add_subdirectory(jit)
+  endif()
+
+  add_subdirectory(vm)
+  add_subdirectory(md)
+
+  if (NOT CLR_CMAKE_TARGET_ARCH_WASM)
+    add_subdirectory(debug)
+  endif()
+
+  add_subdirectory(binder)
+  add_subdirectory(classlibnative)
+  add_subdirectory(dlls)
 endif()
-
-add_subdirectory(vm)
-add_subdirectory(md)
-
-if (NOT CLR_CMAKE_TARGET_ARCH_WASM)
-  add_subdirectory(debug)
-endif()
-
-add_subdirectory(binder)
-add_subdirectory(classlibnative)
-add_subdirectory(dlls)
 
 if (NOT CLR_CMAKE_TARGET_ARCH_WASM)
   add_subdirectory(unwinder)
   add_subdirectory(interop)
 endif()
 
-if(NOT CLR_CMAKE_HOST_MACCATALYST AND NOT CLR_CMAKE_HOST_IOS AND NOT CLR_CMAKE_HOST_TVOS)
+if(NOT CLR_CMAKE_HOST_MACCATALYST AND NOT CLR_CMAKE_HOST_IOS AND NOT CLR_CMAKE_HOST_TVOS AND NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory(tools)
-endif(NOT CLR_CMAKE_HOST_MACCATALYST AND NOT CLR_CMAKE_HOST_IOS AND NOT CLR_CMAKE_HOST_TVOS)
+endif(NOT CLR_CMAKE_HOST_MACCATALYST AND NOT CLR_CMAKE_HOST_IOS AND NOT CLR_CMAKE_HOST_TVOS AND NOT CLR_CMAKE_TARGET_FREERTOS)
 
-if(CLR_CMAKE_HOST_WIN32)
+if(CLR_CMAKE_HOST_WIN32 AND NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory(hosts)
-endif(CLR_CMAKE_HOST_WIN32)
+endif(CLR_CMAKE_HOST_WIN32 AND NOT CLR_CMAKE_TARGET_FREERTOS)

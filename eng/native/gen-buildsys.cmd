@@ -29,10 +29,13 @@ if /i "%__Ninja%" == "1" (
         if /i "%__VSVersion%" == "18.0" (set __CmakeGenerator=%__CmakeGenerator% 18 2026)
         if /i "%__VSVersion%" == "17.0" (set __CmakeGenerator=%__CmakeGenerator% 17 2022)
 
-        if /i "%__Arch%" == "x64" (set __ExtraCmakeParams=%__ExtraCmakeParams% -A x64)
-        if /i "%__Arch%" == "arm" (set __ExtraCmakeParams=%__ExtraCmakeParams% -A ARM)
-        if /i "%__Arch%" == "arm64" (set __ExtraCmakeParams=%__ExtraCmakeParams% -A ARM64)
-        if /i "%__Arch%" == "x86" (set __ExtraCmakeParams=%__ExtraCmakeParams% -A Win32)
+        REM Don't set Visual Studio architecture for cross-compilation targets
+        if /i NOT "%__Os%" == "freertos" (
+            if /i "%__Arch%" == "x64" (set __ExtraCmakeParams=%__ExtraCmakeParams% -A x64)
+            if /i "%__Arch%" == "arm" (set __ExtraCmakeParams=%__ExtraCmakeParams% -A ARM)
+            if /i "%__Arch%" == "arm64" (set __ExtraCmakeParams=%__ExtraCmakeParams% -A ARM64)
+            if /i "%__Arch%" == "x86" (set __ExtraCmakeParams=%__ExtraCmakeParams% -A Win32)
+        )
     ) else (
         set __CmakeGenerator=NMake Makefiles
     )
@@ -70,7 +73,10 @@ if /i "%__Arch%" == "wasm" (
         set __ExtraCmakeParams=%__ExtraCmakeParams% -DCLR_CMAKE_TARGET_OS=wasi -DCLR_CMAKE_TARGET_ARCH=wasm "-DWASI_SDK_PREFIX=!WASI_SDK_PATH!" "-DCMAKE_TOOLCHAIN_FILE=!WASI_SDK_PATH!/share/cmake/wasi-sdk-p2.cmake" "-DCMAKE_SYSROOT=!WASI_SDK_PATH!share/wasi-sysroot" "-DCMAKE_CROSSCOMPILING_EMULATOR=node --experimental-wasm-bigint --experimental-wasi-unstable-preview1"
     )
 ) else (
-    set __ExtraCmakeParams=%__ExtraCmakeParams%  "-DCMAKE_SYSTEM_VERSION=10.0"
+    REM Don't set Windows system version for FreeRTOS
+    if /i NOT "%__Os%" == "freertos" (
+        set __ExtraCmakeParams=%__ExtraCmakeParams%  "-DCMAKE_SYSTEM_VERSION=10.0"
+    )
 )
 
 if /i "%__Os%" == "android" (
@@ -100,6 +106,15 @@ if /i "%__Os%" == "android" (
     set __ExtraCmakeParams=!__ExtraCmakeParams! "-DCMAKE_TOOLCHAIN_FILE='%ANDROID_NDK_ROOT:\=/%/build/cmake/android.toolchain.cmake'" "-C %__repoRoot%/eng/native/tryrun.cmake"
 )
 
+if /i "%__Os%" == "freertos" (
+    echo Configuring FreeRTOS ARM cross-compilation from Windows
+    set __CmakeGenerator=Ninja
+    REM For cross-compilation, host arch is the build machine (x64 on Windows), target arch is arm
+    set __ExtraCmakeParams=!__ExtraCmakeParams! "-DCLR_CMAKE_HOST_ARCH=x64"
+    set __ExtraCmakeParams=!__ExtraCmakeParams! "-DCLR_CMAKE_TARGET_OS=freertos" "-DCLR_CMAKE_TARGET_ARCH=%__Arch%"
+    set __ExtraCmakeParams=!__ExtraCmakeParams! "-DCMAKE_TOOLCHAIN_FILE=%__repoRoot%/eng/common/cross/toolchain.freertos-windows.cmake"
+)
+
 :loop
 if [%6] == [] goto end_loop
 set __ExtraCmakeParams=%__ExtraCmakeParams% %6
@@ -107,7 +122,12 @@ shift
 goto loop
 :end_loop
 
-set __ExtraCmakeParams="-DCMAKE_INSTALL_PREFIX=%__CMakeBinDir%" "-DCLR_CMAKE_HOST_ARCH=%__Arch%" %__ExtraCmakeParams%
+REM For FreeRTOS cross-compilation, host arch is already set in the FreeRTOS block
+if /i NOT "%__Os%" == "freertos" (
+    set __ExtraCmakeParams="-DCMAKE_INSTALL_PREFIX=%__CMakeBinDir%" "-DCLR_CMAKE_HOST_ARCH=%__Arch%" %__ExtraCmakeParams%
+) else (
+    set __ExtraCmakeParams="-DCMAKE_INSTALL_PREFIX=%__CMakeBinDir%" %__ExtraCmakeParams%
+)
 
 set __CmdLineOptionsUpToDateFile=%__IntermediatesDir%\cmake_cmd_line.txt
 set __CMakeCmdLineCache=

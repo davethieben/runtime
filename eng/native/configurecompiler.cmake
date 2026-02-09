@@ -1013,7 +1013,7 @@ if (CMAKE_GENERATOR MATCHES "(Makefile|Ninja)")
 endif()
 
 # Ensure other tools are present
-if (CLR_CMAKE_HOST_WIN32)
+if (CLR_CMAKE_HOST_WIN32 AND NOT CLR_CMAKE_TARGET_FREERTOS)
     if(CLR_CMAKE_HOST_ARCH_ARM64)
       # Explicitly specify the assembler to be used for Arm64 compile
       if (CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
@@ -1057,4 +1057,4 @@ elseif (NOT CLR_CMAKE_HOST_BROWSER AND NOT CLR_CMAKE_HOST_WASI)
 
     enable_language(ASM)
 
-endif(CLR_CMAKE_HOST_WIN32)
+endif(CLR_CMAKE_HOST_WIN32 AND NOT CLR_CMAKE_TARGET_FREERTOS)

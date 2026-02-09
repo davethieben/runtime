@@ -24,6 +24,8 @@
 
 #elif defined(TARGET_WASI)
 #define PORTABLE_RID_OS "wasi"
+#elif defined(TARGET_FREERTOS)
+#define PORTABLE_RID_OS "freertos"
 #elif defined(TARGET_WINDOWS)
 #define PORTABLE_RID_OS "win"
 #else

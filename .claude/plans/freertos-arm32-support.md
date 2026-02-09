@@ -486,6 +486,125 @@ src/libraries/tests.proj                   # Test exclusions
 
 ---
 
+## Phase 2 Progress: Windows Cross-Compilation (IN PROGRESS)
+
+### What We've Accomplished
+
+Successfully configured Windows-to-FreeRTOS ARM cross-compilation:
+
+1. **Created Toolchain File** - `eng/common/cross/toolchain.freertos-windows.cmake`
+   - Configures arm-none-eabi-gcc as the cross-compiler
+   - Sets CMAKE_SYSTEM_NAME to "Generic" for bare-metal
+   - Explicitly sets host architecture variables (CLR_CMAKE_HOST_WIN32, CLR_CMAKE_HOST_ARCH_AMD64)
+   - Sets CMAKE_C_COMPILER_TARGET to enable proper tool detection
+
+2. **Modified Build Scripts** - `eng/native/gen-buildsys.cmd`
+   - Added FreeRTOS detection block (lines 103-110)
+   - Forces Ninja generator for FreeRTOS builds
+   - Sets CLR_CMAKE_HOST_ARCH=x64 (build machine) vs CLR_CMAKE_TARGET_ARCH=arm (target)
+   - Applies toolchain file automatically
+   - Skips Visual Studio-specific flags and Windows system version for FreeRTOS
+
+3. **Updated Compiler Configuration** - `eng/native/configurecompiler.cmake`
+   - Added FreeRTOS as separate elseif case (lines 776-779)
+   - Defines TARGET_FREERTOS instead of TARGET_WINDOWS
+   - Adds DISABLE_CONTRACTS for FreeRTOS (like Unix targets)
+
+4. **Fixed Platform Detection** - `src/coreclr/nativeaot/Runtime/CMakeLists.txt`
+   - Changed WIN32 to CLR_CMAKE_TARGET_WIN32 (line 85)
+   - Prevents Windows-specific code from being included for FreeRTOS cross-compilation
+   - Added FreeRTOS elseif block with proper ASM_SUFFIX and definitions
+
+5. **Modified Unix Configuration** - `src/coreclr/nativeaot/Runtime/CMakeLists.txt`
+   - Changed else() to elseif(CLR_CMAKE_TARGET_UNIX) (line 308)
+   - Added separate elseif for FreeRTOS to skip unix/configure.cmake
+   - Prevents FreeRTOS from falling through to Unix or Windows paths
+
+6. **Created FreeRTOS Build Integration**
+   - `src/coreclr/nativeaot/BuildIntegration/Microsoft.NETCore.Native.FreeRTOS.targets`
+   - Configures arm-none-eabi toolchain, linker flags, and bare-metal specs
+   - Supports configurable CPU type, FPU, and float ABI
+   - Integrated into main targets file with conditional import
+
+7. **Updated Native Libraries Configuration**
+   - Excluded FreeRTOS from System.Net.Security.Native and System.Security.Cryptography.Native
+   - Modified both `src/native/libs/CMakeLists.txt` and `src/native/corehost/apphost/static/CMakeLists.txt`
+   - FreeRTOS grouped with Browser/WASI for library exclusions
+
+8. **Excluded CoreCLR Tools** - `src/coreclr/CMakeLists.txt`
+   - Added CLR_CMAKE_TARGET_FREERTOS exclusions to tools and hosts subdirectories (lines 312-318)
+   - Prevents building JIT tools (superpmi, corerun, etc.) for NativeAOT-only targets
+
+### Current Status
+
+**Build Command:**
+```powershell
+.\build.cmd clr.nativeaotruntime -os freertos -arch arm -c Debug
+```
+
+**Current Issue:**
+Build is still trying to compile CoreCLR/JIT components (jitinterface, clrgc, clrjit, createdump, mscorrc) even though `-component nativeaot` is specified. These components have "No SOURCES" errors because they're being configured for a Generic/FreeRTOS target where their source lists aren't populated.
+
+**Root Cause:**
+The `-component nativeaot` flag tells MSBuild which subset to build, but CMake is still processing the entire `src/coreclr/CMakeLists.txt` file, including CoreCLR components. The component filtering happens at the MSBuild level, not the CMake level.
+
+### Key Learnings
+
+1. **Cross-Compilation is Complex on Windows**
+   - Windows build system assumes native Windows builds
+   - Toolchain files with CMAKE_SYSTEM_NAME="Generic" break WIN32 detection
+   - Must explicitly set host architecture variables in toolchain file
+
+2. **Host vs Target Architecture**
+   - CLR_CMAKE_HOST_ARCH = build machine architecture (x64 on Windows)
+   - CLR_CMAKE_TARGET_ARCH = target architecture (arm for FreeRTOS)
+   - Build scripts were incorrectly setting host arch to target arch
+
+3. **Platform Detection Order Matters**
+   - Toolchain file executes before command-line CMake variables
+   - Platform detection in configureplatform.cmake depends on order of checks
+   - FreeRTOS needed its own elseif block to avoid falling into Windows or Unix paths
+
+4. **Component Build System**
+   - CoreCLR CMakeLists.txt processes both JIT and NativeAOT components
+   - Component filtering (-component nativeaot) happens in MSBuild, not CMake
+   - Need to conditionally exclude JIT components at CMake level for NativeAOT-only targets
+
+### Next Steps
+
+1. **Investigate Component Build Logic**
+   - Understand how -component nativeaot should work
+   - Determine if NativeAOT subdirectory should be built separately
+   - Check if there's a FEATURE_JIT or similar flag to skip CoreCLR components
+
+2. **Add CMake Conditionals for NativeAOT-Only Builds**
+   - Skip JIT subdirectories when building NativeAOT for embedded targets
+   - Add CLR_CMAKE_TARGET_FREERTOS checks to gc/, jit/, debug/ subdirectory inclusions
+   - Or determine if there's a better way to invoke CMake only on nativeaot/
+
+3. **Phase 3: Implement FreeRTOS PAL**
+   - Once build system issues are resolved
+   - Create PalFreeRTOS.cpp with memory, threading, and synchronization implementations
+   - Map NativeAOT PAL calls to FreeRTOS APIs
+
+### Files Modified (Phase 2)
+
+```
+eng/common/cross/toolchain.freertos-windows.cmake   # NEW
+eng/native/gen-buildsys.cmd                         # Modified
+eng/native/configurecompiler.cmake                  # Modified
+eng/Subsets.props                                   # Modified
+src/coreclr/CMakeLists.txt                          # Modified
+src/coreclr/nativeaot/Runtime/CMakeLists.txt        # Modified
+src/coreclr/nativeaot/Runtime/freertos/PalFreeRTOS.h # NEW
+src/coreclr/nativeaot/BuildIntegration/Microsoft.NETCore.Native.FreeRTOS.targets # NEW
+src/coreclr/nativeaot/BuildIntegration/Microsoft.NETCore.Native.targets # Modified
+src/native/libs/CMakeLists.txt                      # Modified
+src/native/corehost/apphost/static/CMakeLists.txt   # Modified
+```
+
+---
+
 ## Open Questions
 
 1. **FreeRTOS version?** - Target FreeRTOS 10.x or 11.x?

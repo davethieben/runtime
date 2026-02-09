@@ -18,6 +18,12 @@ typedef int ds_ipc_socket_t;
 typedef struct sockaddr ds_ipc_socket_address_t;
 typedef int ds_ipc_socket_family_t;
 typedef socklen_t ds_ipc_socket_len_t;
+#elif defined(TARGET_FREERTOS)
+// FreeRTOS bare-metal - no sockets support needed for basic runtime
+typedef int ds_ipc_socket_t;
+typedef void* ds_ipc_socket_address_t;
+typedef int ds_ipc_socket_family_t;
+typedef unsigned int ds_ipc_socket_len_t;
 #else
 #include <winsock2.h>
 typedef SOCKET ds_ipc_socket_t;
