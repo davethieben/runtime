@@ -11,7 +11,8 @@
 #include "cpufeatures.h"
 #include "cpuid.h"
 
-#if HOST_WINDOWS
+// For cross-compilation, check target OS not host OS
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
 
 #include <Windows.h>
 

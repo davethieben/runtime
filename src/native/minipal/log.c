@@ -221,7 +221,8 @@ void minipal_log_flush_all(void)
     minipal_log_flush(minipal_log_flags_info);
 }
 
-#ifdef HOST_WINDOWS
+// For cross-compilation, check target OS not host OS
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
 #include <Windows.h>
 #include <io.h>
 

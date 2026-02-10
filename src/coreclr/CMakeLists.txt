@@ -82,7 +82,8 @@ endif()
 #-------------------------------
 # Include libraries native shims
 #-------------------------------
-if(NOT CLR_CROSS_COMPONENTS_BUILD)
+if(NOT CLR_CROSS_COMPONENTS_BUILD AND NOT CLR_CMAKE_TARGET_FREERTOS)
+  # FreeRTOS bare-metal: Skip native libraries (compression, etc.) - only build core runtime
   set(STATIC_LIBS_ONLY 1)
   add_subdirectory(${CLR_SRC_NATIVE_DIR}/libs libs-native)
 endif()

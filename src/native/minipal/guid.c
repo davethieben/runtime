@@ -6,7 +6,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
-#ifdef HOST_WINDOWS
+// For cross-compilation, check target OS not host OS
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
 #include <Windows.h>
 #include <objbase.h>
 #endif
@@ -31,7 +32,7 @@
 //
 bool minipal_guid_v4_create(GUID* guid)
 {
-#ifdef HOST_WINDOWS
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
     // Windows has a built-in function for creating v4 GUIDs.
     return SUCCEEDED(CoCreateGuid(guid));
 #else

@@ -6,11 +6,12 @@
 
 #if defined(HOST_X86) || defined(HOST_AMD64)
 
-#if defined(HOST_WINDOWS)
+// For cross-compilation, check target OS not host OS
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
 
 #include <intrin.h>
 
-#endif // HOST_WINDOWS
+#endif // TARGET_WINDOWS || (HOST_WINDOWS && !TARGET_FREERTOS)
 
 #if defined(HOST_UNIX)
 

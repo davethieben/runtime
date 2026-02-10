@@ -25,14 +25,36 @@ typedef uint64_t ULONGLONG;
 typedef uint64_t ULONG64;
 typedef uint8_t UCHAR;
 typedef uint8_t BOOLEAN;
+typedef uint8_t BYTE;
 typedef char CHAR;
+typedef int INT;
+typedef unsigned int UINT;
+typedef int8_t INT8;
+typedef int16_t INT16;
+typedef int32_t INT32;
+typedef int64_t INT64;
+typedef int64_t LONGLONG;
+typedef uint8_t UINT8;
 typedef uint16_t UINT16;
 typedef uint32_t UINT32;
+typedef uint64_t UINT64;
 typedef uint16_t WORD;
 typedef uint64_t DWORD64;
+typedef size_t SIZE_T;
+typedef float FLOAT;
+typedef double DOUBLE;
+typedef LONG NTSTATUS;
 typedef void* PVOID;
 typedef void* LPVOID;
 typedef DWORD* PDWORD;
+typedef uintptr_t ULONG_PTR;
+typedef uintptr_t UINT_PTR;
+typedef intptr_t LONG_PTR;
+
+// Boolean type for functions (0 = false, non-zero = true)
+typedef uint32_t UInt32_BOOL;
+#define UInt32_TRUE 1
+#define UInt32_FALSE 0
 
 // Thread function pointer type
 typedef DWORD (*LPTHREAD_START_ROUTINE)(LPVOID lpThreadParameter);
@@ -40,25 +62,40 @@ typedef DWORD (*LPTHREAD_START_ROUTINE)(LPVOID lpThreadParameter);
 typedef char16_t WCHAR;
 #endif
 
-// Forward declarations for exception handling structures (full definitions later in file)
-struct _EXCEPTION_RECORD;
-typedef struct _EXCEPTION_RECORD EXCEPTION_RECORD, *PEXCEPTION_RECORD;
+// Constants needed by exception structures
+#ifndef EXCEPTION_MAXIMUM_PARAMETERS
+#define EXCEPTION_MAXIMUM_PARAMETERS 15
+#endif
+
+// Forward declare CONTEXT (full ARM definition in pal.h if needed)
+struct _CONTEXT;
+typedef struct _CONTEXT CONTEXT, *PCONTEXT, *LPCONTEXT;
+
+// Full exception handling structure definitions
+typedef struct _EXCEPTION_RECORD {
+    DWORD ExceptionCode;
+    DWORD ExceptionFlags;
+    struct _EXCEPTION_RECORD *ExceptionRecord;
+    PVOID ExceptionAddress;
+    DWORD NumberParameters;
+    ULONG_PTR ExceptionInformation[EXCEPTION_MAXIMUM_PARAMETERS];
+} EXCEPTION_RECORD, *PEXCEPTION_RECORD;
+
+typedef struct _EXCEPTION_POINTERS {
+    PEXCEPTION_RECORD ExceptionRecord;
+    PCONTEXT ContextRecord;
+} EXCEPTION_POINTERS, *PEXCEPTION_POINTERS, *LPEXCEPTION_POINTERS;
+
+// Exception handling support
+typedef LONG EXCEPTION_DISPOSITION;
+
+// Note: PEXCEPTION_ROUTINE is defined later in the file
+// Forward declarations for runtime function structures
 struct _RUNTIME_FUNCTION;
 typedef struct _RUNTIME_FUNCTION RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
 
-typedef enum _EXCEPTION_DISPOSITION {
-    ExceptionContinueExecution,
-    ExceptionContinueSearch,
-    ExceptionNestedException,
-    ExceptionCollidedUnwind
-} EXCEPTION_DISPOSITION;
-
-typedef EXCEPTION_DISPOSITION (*PEXCEPTION_ROUTINE)(
-    PEXCEPTION_RECORD ExceptionRecord,
-    PVOID EstablisherFrame,
-    PVOID ContextRecord,
-    PVOID DispatcherContext
-);
+// Additional types needed for exception handling
+typedef BYTE* PBYTE;
 #ifndef WINAPI
 #define WINAPI
 #endif
@@ -70,9 +107,6 @@ typedef EXCEPTION_DISPOSITION (*PEXCEPTION_ROUTINE)(
 #endif
 #ifndef OUT
 #define OUT
-#endif
-#ifndef EXCEPTION_MAXIMUM_PARAMETERS
-#define EXCEPTION_MAXIMUM_PARAMETERS 15
 #endif
 #endif // TARGET_FREERTOS && !ULONG
 

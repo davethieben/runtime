@@ -5,7 +5,8 @@
 #include <minipal/time.h>
 #include "minipalconfig.h"
 
-#if HOST_WINDOWS
+// For cross-compilation, check target OS not host OS
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
 
 #include <Windows.h>
 
@@ -32,7 +33,29 @@ int64_t minipal_lowres_ticks()
     return GetTickCount64();
 }
 
-#else // HOST_WINDOWS
+#elif defined(TARGET_FREERTOS)
+
+// FreeRTOS bare-metal time implementation
+#include <stdint.h>
+
+// TODO: Implement using FreeRTOS xTaskGetTickCount() when available
+// For now, return placeholder values
+int64_t minipal_hires_ticks()
+{
+    return 0; // TODO: Use FreeRTOS tick count
+}
+
+int64_t minipal_hires_tick_frequency()
+{
+    return 1000; // TODO: Use configTICK_RATE_HZ
+}
+
+int64_t minipal_lowres_ticks()
+{
+    return 0; // TODO: Use FreeRTOS tick count
+}
+
+#else // Unix/POSIX
 
 #include "minipalconfig.h"
 
@@ -129,7 +152,7 @@ int64_t minipal_lowres_ticks(void)
 
 void minipal_microdelay(uint32_t usecs, uint32_t* usecsSinceYield)
 {
-#if HOST_WINDOWS
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
     if (usecs > 1000)
     {
         SleepEx(usecs / 1000, FALSE);
@@ -140,6 +163,14 @@ void minipal_microdelay(uint32_t usecs, uint32_t* usecsSinceYield)
 
         return;
     }
+#elif defined(TARGET_FREERTOS)
+    // FreeRTOS: Simple busy-wait for now
+    // TODO: Consider using vTaskDelay for longer delays
+    if (usecsSinceYield)
+    {
+        *usecsSinceYield = 0;
+    }
+    // Fall through to spin loop below
 #else
     if (usecs > 10)
     {
