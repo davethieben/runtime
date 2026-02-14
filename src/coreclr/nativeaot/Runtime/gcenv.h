@@ -16,7 +16,7 @@
 
 #include <minipal/mutex.h>
 
-#ifdef TARGET_UNIX
+#if defined(TARGET_UNIX) || defined(TARGET_FREERTOS)
 #include <pthread.h>
 #endif
 

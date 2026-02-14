@@ -19,7 +19,7 @@
 #include <stdarg.h>
 #ifdef HOST_WINDOWS
 #include <windows.h>
-#elif !defined(TARGET_FREERTOS)
+#else
 #include <pthread.h>
 #endif
 

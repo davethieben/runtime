@@ -15,7 +15,14 @@ struct GCSystemInfo
 
 typedef void * HANDLE;
 
-#ifdef TARGET_UNIX
+#if defined(TARGET_UNIX) || defined(TARGET_FREERTOS)
+
+// FreeRTOS: newlib-nano pthread.h requires _POSIX_THREADS, so provide stubs
+#if defined(TARGET_FREERTOS) && !defined(_POSIX_THREADS)
+typedef uint32_t pthread_t;
+inline pthread_t pthread_self(void) { return 1; }
+inline int pthread_equal(pthread_t t1, pthread_t t2) { return t1 == t2; }
+#endif
 
 class EEThreadId
 {
@@ -42,7 +49,7 @@ public:
     }
 };
 
-#else // TARGET_UNIX
+#else // TARGET_UNIX || TARGET_FREERTOS
 
 class EEThreadId
 {

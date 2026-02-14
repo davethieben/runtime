@@ -114,10 +114,6 @@ inline int _stricmp(const char* string1, const char* string2)
     return *string1 - *string2;
 }
 
-// pthread_self stub for FreeRTOS (pthread_t is defined in pthread.h)
-#include <pthread.h>
-inline pthread_t pthread_self() { return (pthread_t)1; }
-
 // Windows exception handler stub
 typedef LONG (*PVECTORED_EXCEPTION_HANDLER)(struct _EXCEPTION_POINTERS*);
 inline PVOID AddVectoredExceptionHandler(ULONG First, PVECTORED_EXCEPTION_HANDLER Handler)
