@@ -316,7 +316,8 @@ int minipal_log_write(minipal_log_flags flags, const char* msg)
 
     write_file_fnptr write_fnptr = write_file;
 
-#ifdef HOST_WINDOWS
+// For cross-compilation, check target OS not host OS
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
     const char* msg_char = msg;
     while (*msg_char)
     {   if (msg_char[0] == '\r' && msg_char[1] == '\n')

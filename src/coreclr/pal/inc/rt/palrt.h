@@ -28,6 +28,13 @@ typedef uint8_t BOOLEAN;
 typedef uint8_t BYTE;
 typedef char CHAR;
 typedef int INT;
+typedef int BOOL;  // 32-bit boolean (different from BOOLEAN which is 8-bit)
+#ifndef FALSE
+#define FALSE 0
+#endif
+#ifndef TRUE
+#define TRUE 1
+#endif
 typedef unsigned int UINT;
 typedef int8_t INT8;
 typedef int16_t INT16;
@@ -56,11 +63,45 @@ typedef uint32_t UInt32_BOOL;
 #define UInt32_TRUE 1
 #define UInt32_FALSE 0
 
+// Function pointer types
+typedef void (*HijackFunc)(void);
+
 // Thread function pointer type
 typedef DWORD (*LPTHREAD_START_ROUTINE)(LPVOID lpThreadParameter);
+
 #ifndef WCHAR
 typedef char16_t WCHAR;
 #endif
+
+// Exception raising stub (not supported on bare-metal)
+inline void RaiseException(DWORD dwExceptionCode, DWORD dwExceptionFlags, DWORD nNumberOfArguments, const ULONG_PTR* lpArguments)
+{
+    // FreeRTOS bare-metal: Cannot raise Windows exceptions
+    // This should not be called in normal operation
+    while(1); // Halt
+}
+
+// Thread ID functions (declared here, defined in PalFreeRTOS.cpp)
+uint32_t GetCurrentThreadId();
+uint32_t PalGetCurrentProcessId();
+
+// MSVC-specific functions not available on bare-metal
+// Provide simple implementations for compatibility
+inline int _vsnprintf_s(char* buffer, size_t sizeOfBuffer, size_t count, const char* format, va_list argptr)
+{
+    (void)count; // _TRUNCATE support ignored on bare-metal
+    return vsnprintf(buffer, sizeOfBuffer, format, argptr);
+}
+
+// Wide character file operations not supported on bare-metal FreeRTOS
+inline FILE* _wfopen(const WCHAR* filename, const WCHAR* mode)
+{
+    // FreeRTOS bare-metal: Wide character files not supported
+    // Return NULL to indicate failure
+    (void)filename;
+    (void)mode;
+    return nullptr;
+}
 
 // Constants needed by exception structures
 #ifndef EXCEPTION_MAXIMUM_PARAMETERS
@@ -89,6 +130,20 @@ typedef struct _EXCEPTION_POINTERS {
 // Exception handling support
 typedef LONG EXCEPTION_DISPOSITION;
 
+// RaiseFailFastException stub (not supported on bare-metal)
+#ifndef FAIL_FAST_GENERATE_EXCEPTION_ADDRESS
+#define FAIL_FAST_GENERATE_EXCEPTION_ADDRESS 0x1
+#endif
+
+inline void RaiseFailFastException(PEXCEPTION_RECORD pExceptionRecord, PCONTEXT pContextRecord, DWORD dwFlags)
+{
+    // FreeRTOS bare-metal: Terminate immediately
+    (void)pExceptionRecord;
+    (void)pContextRecord;
+    (void)dwFlags;
+    while(1); // Halt
+}
+
 // Note: PEXCEPTION_ROUTINE is defined later in the file
 // Forward declarations for runtime function structures
 struct _RUNTIME_FUNCTION;
@@ -99,6 +154,12 @@ typedef BYTE* PBYTE;
 #ifndef WINAPI
 #define WINAPI
 #endif
+#ifndef FAR
+#define FAR
+#endif
+#ifndef NEAR
+#define NEAR
+#endif
 #ifndef UNALIGNED
 #define UNALIGNED
 #endif
@@ -107,6 +168,9 @@ typedef BYTE* PBYTE;
 #endif
 #ifndef OUT
 #define OUT
+#endif
+#ifndef OPTIONAL
+#define OPTIONAL
 #endif
 #endif // TARGET_FREERTOS && !ULONG
 

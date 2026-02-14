@@ -44,10 +44,13 @@ typedef uint32_t            UInt32_BOOL;    // windows 4-byte BOOL, 0 -> false, 
 #define UInt32_FALSE        0
 #define UInt32_TRUE         1
 
-#if (defined(FEATURE_EVENT_TRACE) && defined(TARGET_UNIX)) || defined(TARGET_FREERTOS)
+#if defined(FEATURE_EVENT_TRACE) && defined(TARGET_UNIX)
+// Unix event tracing needs Windows-compatible types
 typedef int BOOL;
 typedef void* LPVOID;
+#ifndef UINT
 typedef uint32_t UINT;
+#endif
 typedef void* PVOID;
 typedef uint64_t ULONGLONG;
 typedef uintptr_t ULONG_PTR;
@@ -58,10 +61,14 @@ typedef uint16_t UINT16;
 typedef uint16_t USHORT;
 typedef uint32_t DWORD;
 typedef int32_t LONG;
-#endif // (FEATURE_EVENT_TRACE && TARGET_UNIX) || TARGET_FREERTOS
+#endif // FEATURE_EVENT_TRACE && TARGET_UNIX
+// FreeRTOS: Types are defined in palrt.h
 
 // Hijack funcs are not called, they are "returned to". And when done, they return to the actual caller.
 // Thus they cannot have any parameters or return anything.
+#if !defined(HijackFunc) && !defined(TARGET_FREERTOS)
+// FreeRTOS: HijackFunc is defined in palrt.h as function pointer type
 typedef void HijackFunc();
+#endif
 
 #endif // __COMMON_TYPES_H__

@@ -56,6 +56,13 @@ uint32_t PalGetCurrentProcessId()
     return 1;
 }
 
+uint32_t GetCurrentThreadId()
+{
+    // TODO: Return FreeRTOS task handle or ID
+    // For now, return a constant (single-threaded stub)
+    return 1;
+}
+
 void PalGetSystemTimeAsFileTime(FILETIME* lpSystemTimeAsFileTime)
 {
     // TODO: Implement time conversion from FreeRTOS tick count

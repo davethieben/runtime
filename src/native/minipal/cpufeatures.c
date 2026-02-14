@@ -163,7 +163,7 @@ static bool IsApxEnabled()
 #endif // defined(HOST_X86) || defined(HOST_AMD64)
 #endif // HOST_UNIX
 
-#if defined(HOST_WINDOWS)
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
 #if defined(HOST_X86) || defined(HOST_AMD64)
 static uint32_t xmmYmmStateSupport()
 {
@@ -215,7 +215,7 @@ static bool IsApxEnabled()
 }
 
 #endif // defined(HOST_X86) || defined(HOST_AMD64)
-#endif // HOST_WINDOWS
+#endif // TARGET_WINDOWS || (HOST_WINDOWS && !TARGET_FREERTOS)
 
 int minipal_getcpufeatures(void)
 {
@@ -529,7 +529,7 @@ int minipal_getcpufeatures(void)
 #endif // HAVE_AUXV_HWCAP_H
 #endif // HOST_UNIX
 
-#if defined(HOST_WINDOWS)
+#if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
     if (IsProcessorFeaturePresent(PF_ARM_V8_CRYPTO_INSTRUCTIONS_AVAILABLE))
     {
         result |= ARM64IntrinsicConstants_Aes;
@@ -580,7 +580,7 @@ int minipal_getcpufeatures(void)
         result |= ARM64IntrinsicConstants_Sve2;
     }
 
-#endif // HOST_WINDOWS
+#endif // TARGET_WINDOWS || (HOST_WINDOWS && !TARGET_FREERTOS)
 
 #endif // HOST_ARM64
 

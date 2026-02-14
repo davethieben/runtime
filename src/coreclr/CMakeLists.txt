@@ -67,7 +67,8 @@ include(components.cmake)
 #---------------------------
 # Build the single file host
 #---------------------------
-if(NOT CLR_CROSS_COMPONENTS_BUILD AND NOT CLR_CMAKE_TARGET_MACCATALYST AND NOT CLR_CMAKE_TARGET_IOS AND NOT CLR_CMAKE_TARGET_TVOS AND NOT CLR_CMAKE_TARGET_ARCH_WASM)
+if(NOT CLR_CROSS_COMPONENTS_BUILD AND NOT CLR_CMAKE_TARGET_MACCATALYST AND NOT CLR_CMAKE_TARGET_IOS AND NOT CLR_CMAKE_TARGET_TVOS AND NOT CLR_CMAKE_TARGET_ARCH_WASM AND NOT CLR_CMAKE_TARGET_FREERTOS)
+  # FreeRTOS bare-metal: Skip single file host - requires file system and memory mapping
   set(CLR_SINGLE_FILE_HOST_ONLY 1)
   add_subdirectory(${CLR_SRC_NATIVE_DIR}/corehost/apphost/static Corehost.Static)
   add_dependencies(runtime singlefilehost)
@@ -221,7 +222,10 @@ if(CLR_CMAKE_TARGET_WIN32 AND FEATURE_EVENT_TRACE)
     include_directories("${GENERATED_INCLUDE_DIR}/etw")
 endif(CLR_CMAKE_TARGET_WIN32 AND FEATURE_EVENT_TRACE)
 
-add_subdirectory(debug/dbgutil)
+if (NOT CLR_CMAKE_TARGET_FREERTOS)
+  # FreeRTOS bare-metal: Skip CoreCLR debugging utilities - not needed for NativeAOT
+  add_subdirectory(debug/dbgutil)
+endif()
 
 if(CLR_CMAKE_HOST_UNIX)
   if(CLR_CMAKE_HOST_OSX OR (CLR_CMAKE_HOST_LINUX AND NOT CLR_CMAKE_HOST_UNIX_X86 AND NOT CLR_CMAKE_HOST_ANDROID))
@@ -283,8 +287,11 @@ if(CLR_CMAKE_HOST_UNIX)
   add_subdirectory(nativeresources)
 endif(CLR_CMAKE_HOST_UNIX)
 
-add_subdirectory(utilcode)
-add_subdirectory(inc)
+if (NOT CLR_CMAKE_TARGET_FREERTOS)
+  # FreeRTOS bare-metal: Skip CoreCLR utility code and IDL compilation - not needed for NativeAOT
+  add_subdirectory(utilcode)
+  add_subdirectory(inc)
+endif()
 
 if (CLR_CMAKE_BUILD_TOOLS AND NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory(ilasm)

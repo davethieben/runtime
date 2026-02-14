@@ -63,7 +63,8 @@ static void * UpdatePointerPairAtomically(void * pPairLocation,
                                           void * pSecondPointer,
                                           bool fFailOnNonNull)
 {
-#if defined(HOST_64BIT)
+// For cross-compilation, check target architecture not host architecture
+#if defined(TARGET_64BIT)
     // The same comments apply to the AMD64 version. The CompareExchange looks a little different since the
     // API was refactored in terms of int64_t to avoid creating a 128-bit integer type.
 

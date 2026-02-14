@@ -8,7 +8,12 @@
 bool minipal_mutex_init(minipal_mutex* mtx)
 {
     assert(mtx != NULL);
-#ifdef HOST_WINDOWS
+#if defined(TARGET_FREERTOS)
+    // FreeRTOS: stub implementation for single-threaded runtime
+    // TODO: Implement using FreeRTOS semaphores when threading is added
+    mtx->_impl.placeholder = 0;
+    return true;
+#elif defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
     InitializeCriticalSection(&mtx->_impl);
     return true;
 #else
@@ -24,19 +29,22 @@ bool minipal_mutex_init(minipal_mutex* mtx)
     pthread_mutexattr_destroy(&mutexAttributes);
 
     return (st == 0);
-#endif // HOST_WINDOWS
+#endif
 }
 
 void minipal_mutex_destroy(minipal_mutex* mtx)
 {
     assert(mtx != NULL);
-#ifdef HOST_WINDOWS
+#if defined(TARGET_FREERTOS)
+    // FreeRTOS: stub implementation
+    mtx->_impl.placeholder = 0;
+#elif defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
     DeleteCriticalSection(&mtx->_impl);
 #else
     int st = pthread_mutex_destroy(&mtx->_impl);
     assert(st == 0);
     (void)st;
-#endif // HOST_WINDOWS
+#endif
 
 #ifdef _DEBUG
     memset(mtx, 0, sizeof(*mtx));
@@ -46,23 +54,29 @@ void minipal_mutex_destroy(minipal_mutex* mtx)
 void minipal_mutex_enter(minipal_mutex* mtx)
 {
     assert(mtx != NULL);
-#ifdef HOST_WINDOWS
+#if defined(TARGET_FREERTOS)
+    // FreeRTOS: stub implementation
+    (void)mtx;
+#elif defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
     EnterCriticalSection(&mtx->_impl);
 #else
     int st = pthread_mutex_lock(&mtx->_impl);
     assert(st == 0);
     (void)st;
-#endif // HOST_WINDOWS
+#endif
 }
 
 void minipal_mutex_leave(minipal_mutex* mtx)
 {
     assert(mtx != NULL);
-#ifdef HOST_WINDOWS
+#if defined(TARGET_FREERTOS)
+    // FreeRTOS: stub implementation
+    (void)mtx;
+#elif defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
     LeaveCriticalSection(&mtx->_impl);
 #else
     int st = pthread_mutex_unlock(&mtx->_impl);
     assert(st == 0);
     (void)st;
-#endif // HOST_WINDOWS
+#endif
 }

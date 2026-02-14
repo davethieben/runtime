@@ -1,7 +1,11 @@
 include_directories(.)
 include_directories(${CLR_SRC_NATIVE_DIR})
-if (CLR_CMAKE_HOST_UNIX)
+# For cross-compilation, check target OS not host OS
+if (CLR_CMAKE_TARGET_FREERTOS)
+    # FreeRTOS bare-metal: no platform-specific minipal subdirectory needed
+    # Use stubs or Unix fallback implementations
+elseif (CLR_CMAKE_TARGET_UNIX OR CLR_CMAKE_HOST_UNIX)
     add_subdirectory(Unix)
-else (CLR_CMAKE_HOST_UNIX)
+else ()
     add_subdirectory(Windows)
-endif (CLR_CMAKE_HOST_UNIX)
+endif ()
