@@ -81,10 +81,6 @@ inline void RaiseException(DWORD dwExceptionCode, DWORD dwExceptionFlags, DWORD 
     while(1); // Halt
 }
 
-// Thread ID functions (declared here, defined in PalFreeRTOS.cpp)
-uint32_t GetCurrentThreadId();
-uint32_t PalGetCurrentProcessId();
-
 // MSVC-specific functions not available on bare-metal
 // Provide simple implementations for compatibility
 inline int _vsnprintf_s(char* buffer, size_t sizeOfBuffer, size_t count, const char* format, va_list argptr)
@@ -103,14 +99,125 @@ inline FILE* _wfopen(const WCHAR* filename, const WCHAR* mode)
     return nullptr;
 }
 
+// Case-insensitive string comparison (MSVC-specific)
+inline int _stricmp(const char* string1, const char* string2)
+{
+    // Simple case-insensitive comparison (ASCII only)
+    while (*string1 && *string2)
+    {
+        char c1 = (*string1 >= 'A' && *string1 <= 'Z') ? *string1 + 32 : *string1;
+        char c2 = (*string2 >= 'A' && *string2 <= 'Z') ? *string2 + 32 : *string2;
+        if (c1 != c2) return c1 - c2;
+        string1++;
+        string2++;
+    }
+    return *string1 - *string2;
+}
+
+// pthread_self stub for FreeRTOS (pthread_t is defined in pthread.h)
+#include <pthread.h>
+inline pthread_t pthread_self() { return (pthread_t)1; }
+
+// Windows exception handler stub
+typedef LONG (*PVECTORED_EXCEPTION_HANDLER)(struct _EXCEPTION_POINTERS*);
+inline PVOID AddVectoredExceptionHandler(ULONG First, PVECTORED_EXCEPTION_HANDLER Handler)
+{
+    (void)First;
+    (void)Handler;
+    return nullptr; // Not supported on bare-metal
+}
+
+// Windows module handle stubs
+typedef void* HMODULE;
+inline HMODULE GetModuleHandleW(const WCHAR* lpModuleName)
+{
+    (void)lpModuleName;
+    return nullptr;
+}
+
+inline void* GetProcAddress(HMODULE hModule, const char* lpProcName)
+{
+    (void)hModule;
+    (void)lpProcName;
+    return nullptr;
+}
+
+// Thread Environment Block stub (Windows-specific)
+inline void* PalNtCurrentTeb()
+{
+    return nullptr; // Not applicable on bare-metal
+}
+
 // Constants needed by exception structures
 #ifndef EXCEPTION_MAXIMUM_PARAMETERS
 #define EXCEPTION_MAXIMUM_PARAMETERS 15
 #endif
 
-// Forward declare CONTEXT (full ARM definition in pal.h if needed)
+// ARM CONTEXT structure for FreeRTOS
+#ifdef TARGET_ARM
+#define ARM_MAX_BREAKPOINTS     8
+#define ARM_MAX_WATCHPOINTS     1
+
+#define CONTEXT_ARM   0x00200000L
+#define CONTEXT_CONTROL (CONTEXT_ARM | 0x1L)
+#define CONTEXT_INTEGER (CONTEXT_ARM | 0x2L)
+#define CONTEXT_FLOATING_POINT  (CONTEXT_ARM | 0x4L)
+#define CONTEXT_DEBUG_REGISTERS (CONTEXT_ARM | 0x8L)
+#define CONTEXT_FULL (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT)
+#define CONTEXT_ALL (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT | CONTEXT_DEBUG_REGISTERS)
+
+typedef struct _NEON128 {
+    ULONGLONG Low;
+    LONGLONG High;
+} NEON128, *PNEON128;
+
+typedef struct _CONTEXT {
+    // Control flags
+    DWORD ContextFlags;
+
+    // Integer registers
+    DWORD R0;
+    DWORD R1;
+    DWORD R2;
+    DWORD R3;
+    DWORD R4;
+    DWORD R5;
+    DWORD R6;
+    DWORD R7;
+    DWORD R8;
+    DWORD R9;
+    DWORD R10;
+    DWORD R11;
+    DWORD R12;
+
+    // Control Registers
+    DWORD Sp;
+    DWORD Lr;
+    DWORD Pc;
+    DWORD Cpsr;
+
+    // Floating Point/NEON Registers
+    DWORD Fpscr;
+    DWORD Padding;
+    union {
+        NEON128 Q[16];
+        ULONGLONG D[32];
+        DWORD S[32];
+    };
+
+    // Debug registers
+    DWORD Bvr[ARM_MAX_BREAKPOINTS];
+    DWORD Bcr[ARM_MAX_BREAKPOINTS];
+    DWORD Wvr[ARM_MAX_WATCHPOINTS];
+    DWORD Wcr[ARM_MAX_WATCHPOINTS];
+
+    DWORD Padding2[2];
+} CONTEXT, *PCONTEXT, *LPCONTEXT;
+#else
+// Non-ARM: forward declare
 struct _CONTEXT;
 typedef struct _CONTEXT CONTEXT, *PCONTEXT, *LPCONTEXT;
+#endif // TARGET_ARM
 
 // Full exception handling structure definitions
 typedef struct _EXCEPTION_RECORD {
@@ -129,6 +236,14 @@ typedef struct _EXCEPTION_POINTERS {
 
 // Exception handling support
 typedef LONG EXCEPTION_DISPOSITION;
+
+// Exception status codes
+#ifndef STATUS_BREAKPOINT
+#define STATUS_BREAKPOINT                 ((DWORD)0x80000003L)
+#endif
+#ifndef STATUS_SINGLE_STEP
+#define STATUS_SINGLE_STEP                ((DWORD)0x80000004L)
+#endif
 
 // RaiseFailFastException stub (not supported on bare-metal)
 #ifndef FAIL_FAST_GENERATE_EXCEPTION_ADDRESS
@@ -173,6 +288,19 @@ typedef BYTE* PBYTE;
 #define OPTIONAL
 #endif
 #endif // TARGET_FREERTOS && !ULONG
+
+// FreeRTOS thread functions need to be in global namespace
+#if defined(TARGET_FREERTOS)
+#ifdef __cplusplus
+// C++ linkage for C++ code
+uint32_t GetCurrentThreadId();
+uint32_t PalGetCurrentProcessId();
+#else
+// C linkage for C code
+uint32_t GetCurrentThreadId(void);
+uint32_t PalGetCurrentProcessId(void);
+#endif
+#endif
 
 /******************* HRESULTs *********************************************/
 

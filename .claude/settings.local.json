@@ -8,7 +8,8 @@
       "Bash(./build.cmd:*)",
       "Bash(tee:*)",
       "Bash(grep:*)",
-      "Bash(ninja:*)"
+      "Bash(ninja:*)",
+      "Bash(1)"
     ]
   }
 }

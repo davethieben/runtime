@@ -37,6 +37,13 @@ struct NATIVE_CONTEXT
     uintptr_t GetIp() { return (uintptr_t)Pc(); }
     uintptr_t GetSp() { return (uintptr_t)Sp(); }
 
+    void SetIp(uintptr_t ip) { Pc() = (uint32_t)ip; }
+    void SetSp(uintptr_t sp) { Sp() = (uint32_t)sp; }
+
+    // Argument register setters (ARM calling convention: R0-R3 are argument registers)
+    void SetArg0Reg(uintptr_t val) { R0() = (uint32_t)val; }
+    void SetArg1Reg(uintptr_t val) { R1() = (uint32_t)val; }
+
     template <typename F>
     void ForEachPossibleObjectRef(F lambda)
     {
