@@ -56,6 +56,11 @@ set(COMMON_RUNTIME_SOURCES
     ${CLR_SRC_NATIVE_DIR}/minipal/xoshiro128pp.c
 )
 
+# DebugHeader requires StressLog types - skip for FreeRTOS which disables StressLog
+if(CLR_CMAKE_TARGET_FREERTOS)
+    list(REMOVE_ITEM COMMON_RUNTIME_SOURCES DebugHeader.cpp)
+endif()
+
 set(SERVER_GC_SOURCES
     ${GC_DIR}/gceesvr.cpp
     ${GC_DIR}/gcsvr.cpp
@@ -70,9 +75,13 @@ set(STANDALONEGC_ENABLED_SOURCES
 )
 
 set(FULL_RUNTIME_SOURCES
-    AsmOffsetsVerify.cpp
     ThunksMapping.cpp
 )
+
+# AsmOffsetsVerify checks assembly helper offsets - skip for FreeRTOS which doesn't use assembly helpers yet
+if(NOT CLR_CMAKE_TARGET_FREERTOS)
+    list(APPEND FULL_RUNTIME_SOURCES AsmOffsetsVerify.cpp)
+endif()
 
 include_directories(inc)
 
@@ -158,6 +167,9 @@ elseif(CLR_CMAKE_TARGET_FREERTOS)
 
   # FreeRTOS doesn't use libunwind - exception handling is different on bare-metal
   add_definitions(-DFEATURE_NATIVEAOT_FREERTOS=1)
+
+  # Disable StressLog for bare-metal (doesn't support floating point logging)
+  add_definitions(-DNO_STRESS_LOG)
 
 else()
   # Unix (Linux, macOS, FreeBSD, etc.)

@@ -91,7 +91,7 @@ void GCToEEInterface::BeforeGcScanRoots(int condemned, bool is_bgc, bool is_conc
 #endif
 }
 
-void GCToEEInterface::GcScanRoots(ScanFunc* fn, int condemned, int max_gen, ScanContext* sc)
+void GCToEEInterface::GcScanRoots(promote_func* fn, int condemned, int max_gen, ScanContext* sc)
 {
     // STRESS_LOG1(LF_GCROOTS, LL_INFO10, "GCScan: Phase = %s\n", sc->promotion ? "promote" : "relocate");
 
@@ -107,19 +107,19 @@ void GCToEEInterface::GcScanRoots(ScanFunc* fn, int condemned, int max_gen, Scan
             while (pRoot != NULL)
             {
                 STRESS_LOG2(LF_GC | LF_GCROOTS, LL_INFO100, "{ Scanning Thread's %p inline thread statics root %p. \n", pThread, pRoot);
-                EnumGcRef(&pRoot->m_threadStaticsBase, GCRK_Object, fn, sc);
+                EnumGcRef(&pRoot->m_threadStaticsBase, GCRK_Object, (ScanFunc*)fn, sc);
                 pRoot = pRoot->m_next;
             }
 
             STRESS_LOG1(LF_GC | LF_GCROOTS, LL_INFO100, "{ Scanning Thread's %p thread statics root. \n", pThread);
-            EnumGcRef(pThread->GetThreadStaticStorage(), GCRK_Object, fn, sc);
+            EnumGcRef(pThread->GetThreadStaticStorage(), GCRK_Object, (ScanFunc*)fn, sc);
 
             STRESS_LOG1(LF_GC | LF_GCROOTS, LL_INFO100, "{ Starting scan of Thread %p\n", pThread);
             sc->thread_under_crawl = pThread;
 #if defined(FEATURE_EVENT_TRACE) && !defined(DACCESS_COMPILE)
             sc->dwEtwRootKind = kEtwGCRootKindStack;
 #endif
-            pThread->GcScanRoots(fn, sc);
+            pThread->GcScanRoots((ScanFunc*)fn, sc);
 
 #if defined(FEATURE_EVENT_TRACE) && !defined(DACCESS_COMPILE)
             sc->dwEtwRootKind = kEtwGCRootKindOther;
@@ -658,7 +658,7 @@ bool GCToEEInterface::CreateThread(void (*threadStart)(void*), void* arg, bool i
 }
 
 // NativeAOT does not use async pinned handles
-void GCToEEInterface::WalkAsyncPinnedForPromotion(Object* object, ScanContext* sc, ScanFunc* callback)
+void GCToEEInterface::WalkAsyncPinnedForPromotion(Object* object, ScanContext* sc, promote_func* callback)
 {
     UNREFERENCED_PARAMETER(object);
     UNREFERENCED_PARAMETER(sc);

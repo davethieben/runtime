@@ -140,7 +140,9 @@ add_subdirectory(${CLR_SRC_NATIVE_DIR}/containers containers)
 add_subdirectory(${CLR_SRC_NATIVE_DIR}/eventpipe eventpipe)
 add_subdirectory(${CLR_SRC_NATIVE_DIR}/minipal shared_minipal)
 
-add_subdirectory(debug/debug-pal)
+if(NOT CLR_CMAKE_TARGET_FREERTOS)
+  add_subdirectory(debug/debug-pal)
+endif()
 
 add_subdirectory(minipal)
 
@@ -316,7 +318,7 @@ if (NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory(dlls)
 endif()
 
-if (NOT CLR_CMAKE_TARGET_ARCH_WASM)
+if (NOT CLR_CMAKE_TARGET_ARCH_WASM AND NOT CLR_CMAKE_TARGET_FREERTOS)
   add_subdirectory(unwinder)
   add_subdirectory(interop)
 endif()

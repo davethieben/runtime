@@ -107,6 +107,13 @@ public:
 
     template <typename T>
     static T CompareExchangePointer(T volatile *destination, T exchange, std::nullptr_t comparand);
+
+    // ARM32-specific overloads to handle int32_t (long int) vs int type mismatches
+#if defined(TARGET_ARM) && !defined(_MSC_VER)
+    static int32_t CompareExchange(int32_t volatile *destination, int exchange, int comparand);
+    static int32_t Exchange(int32_t volatile *destination, int value);
+    static int32_t ExchangeAdd(int32_t volatile *addend, int value);
+#endif
 };
 
 #endif // __GCENV_INTERLOCKED_H__

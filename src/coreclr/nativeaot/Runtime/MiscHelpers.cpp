@@ -453,7 +453,7 @@ FCIMPLEND
 
 FCIMPL3(void*, RhpGetModuleSection, TypeManagerHandle *pModule, int32_t headerId, int32_t* length)
 {
-    return pModule->AsTypeManager()->GetModuleSection((ReadyToRunSectionType)headerId, length);
+    return pModule->AsTypeManager()->GetModuleSection((ReadyToRunSectionType)headerId, (int*)length);
 }
 FCIMPLEND
 

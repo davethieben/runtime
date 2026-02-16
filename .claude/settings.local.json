@@ -9,7 +9,8 @@
       "Bash(tee:*)",
       "Bash(grep:*)",
       "Bash(ninja:*)",
-      "Bash(build.cmd:*)"
+      "Bash(build.cmd:*)",
+      "Bash(cmake:*)"
     ]
   }
 }

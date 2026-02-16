@@ -63,8 +63,8 @@ typedef uint32_t UInt32_BOOL;
 #define UInt32_TRUE 1
 #define UInt32_FALSE 0
 
-// Function pointer types
-typedef void (*HijackFunc)(void);
+// Function types (not function pointer types) to match CommonTypes.h
+typedef void HijackFunc(void);
 
 // Thread function pointer type
 typedef DWORD (*LPTHREAD_START_ROUTINE)(LPVOID lpThreadParameter);
@@ -87,6 +87,16 @@ inline int _vsnprintf_s(char* buffer, size_t sizeOfBuffer, size_t count, const c
 {
     (void)count; // _TRUNCATE support ignored on bare-metal
     return vsnprintf(buffer, sizeOfBuffer, format, argptr);
+}
+
+inline int _snprintf_s(char* buffer, size_t sizeOfBuffer, size_t count, const char* format, ...)
+{
+    (void)count; // _TRUNCATE support ignored on bare-metal
+    va_list args;
+    va_start(args, format);
+    int result = vsnprintf(buffer, sizeOfBuffer, format, args);
+    va_end(args);
+    return result;
 }
 
 // Wide character file operations not supported on bare-metal FreeRTOS
@@ -296,7 +306,59 @@ uint32_t PalGetCurrentProcessId();
 uint32_t GetCurrentThreadId(void);
 uint32_t PalGetCurrentProcessId(void);
 #endif
+
+// Windows error codes needed by GC
+#ifndef NOERROR
+#define NOERROR 0L
 #endif
+#ifndef ERROR_TIMEOUT
+#define ERROR_TIMEOUT 1460L
+#endif
+
+// Windows error macros
+#ifndef HRESULT_FROM_WIN32
+#define HRESULT_FROM_WIN32(x) ((HRESULT)(x) <= 0 ? ((HRESULT)(x)) : ((HRESULT) (((x) & 0x0000FFFF) | (7 << 16) | 0x80000000)))
+#endif
+
+// CPU intrinsics stubs
+#ifdef __cplusplus
+inline void YieldProcessor() { __asm__ __volatile__("yield" ::: "memory"); }
+inline unsigned char BitScanForward(unsigned long* Index, unsigned long Mask)
+{
+    if (Mask == 0) return 0;
+    *Index = __builtin_ctz(Mask);
+    return 1;
+}
+
+inline unsigned char BitScanReverse64(unsigned long* Index, uint64_t Mask)
+{
+    if (Mask == 0) return 0;
+    *Index = 63 - __builtin_clzll(Mask);
+    return 1;
+}
+
+// min/max overloads for type compatibility (handles unsigned int vs uint32_t mismatches)
+// ARM32: unsigned int and unsigned long are different types but both 32-bit
+inline unsigned int min(unsigned int a, unsigned long b) { return a < b ? a : (unsigned int)b; }
+inline unsigned long min(unsigned long a, unsigned int b) { return a < b ? a : b; }
+inline unsigned int max(unsigned int a, unsigned long b) { return a > b ? a : (unsigned int)b; }
+inline unsigned long max(unsigned long a, unsigned int b) { return a > b ? a : b; }
+
+// Generic templates for other type combinations
+template<typename T1, typename T2>
+inline auto min(T1 a, T2 b) -> decltype(a < b ? a : b)
+{
+    return a < b ? a : b;
+}
+
+template<typename T1, typename T2>
+inline auto max(T1 a, T2 b) -> decltype(a > b ? a : b)
+{
+    return a > b ? a : b;
+}
+#endif
+
+#endif // TARGET_FREERTOS
 
 /******************* HRESULTs *********************************************/
 

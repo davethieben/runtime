@@ -256,4 +256,22 @@ __forceinline T Interlocked::CompareExchangePointer(T volatile *destination, T e
 #endif
 }
 
+// ARM32-specific overloads to handle int32_t (long int) vs int type mismatches
+#if defined(TARGET_ARM) && !defined(_MSC_VER)
+__forceinline int32_t Interlocked::CompareExchange(int32_t volatile *destination, int exchange, int comparand)
+{
+    return CompareExchange(destination, (int32_t)exchange, (int32_t)comparand);
+}
+
+__forceinline int32_t Interlocked::Exchange(int32_t volatile *destination, int value)
+{
+    return Exchange(destination, (int32_t)value);
+}
+
+__forceinline int32_t Interlocked::ExchangeAdd(int32_t volatile *addend, int value)
+{
+    return ExchangeAdd(addend, (int32_t)value);
+}
+#endif
+
 #endif // __GCENV_INTERLOCKED_INL__

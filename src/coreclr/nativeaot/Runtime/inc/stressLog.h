@@ -769,6 +769,48 @@ inline StressMsg* ThreadStressLog::AdvWritePastBoundary(int cArgs) {
 
 #endif // DACCESS_COMPILE
 
+#else // !STRESS_LOG
+
+// Stub definitions when STRESS_LOG is not defined (including NO_STRESS_LOG case)
+// Define log level and facility constants as dummies
+#define LL_EVERYTHING  10
+#define LL_INFO1000000  9
+#define LL_INFO100000   8
+#define LL_INFO10000    7
+#define LL_INFO1000     6
+#define LL_INFO100      5
+#define LL_INFO10       4
+#define LL_WARNING      3
+#define LL_ERROR        2
+#define LL_FATALERROR   1
+#define LL_ALWAYS       0
+
+enum LogFacilitiesEnum: unsigned int {
+    LF_ALWAYS        = 0x80000000u,
+    LF_ALL           = 0xFFFFFFFFu,
+    LF_GC            = 0x00000001u,
+    LF_STACKWALK     = 0x00000002u,
+};
+
+// Stub out all STRESS_LOG macros
+#define STRESS_LOG_VA(dprintfLevel, msg)                                do { } WHILE_0
+#define STRESS_LOG0(facility, level, msg)                               do { } WHILE_0
+#define STRESS_LOG1(facility, level, msg, data1)                        do { } WHILE_0
+#define STRESS_LOG2(facility, level, msg, data1, data2)                 do { } WHILE_0
+#define STRESS_LOG3(facility, level, msg, data1, data2, data3)          do { } WHILE_0
+#define STRESS_LOG4(facility, level, msg, data1, data2, data3, data4)   do { } WHILE_0
+#define STRESS_LOG5(facility, level, msg, data1, data2, data3, data4, data5)   do { } WHILE_0
+#define STRESS_LOG6(facility, level, msg, data1, data2, data3, data4, data5, data6)   do { } WHILE_0
+#define STRESS_LOG7(facility, level, msg, data1, data2, data3, data4, data5, data6, data7)   do { } WHILE_0
+#define STRESS_LOG_PLUG_MOVE(plug_start, plug_end, plug_delta)          do { } WHILE_0
+#define STRESS_LOG_ROOT_PROMOTE(root_addr, objPtr, methodTable)         do { } WHILE_0
+#define STRESS_LOG_ROOT_RELOCATE(root_addr, old_value, new_value, methodTable) do { } WHILE_0
+#define STRESS_LOG_GC_START(gcCount, Gen, collectClasses)               do { } WHILE_0
+#define STRESS_LOG_GC_END(gcCount, Gen, collectClasses)                 do { } WHILE_0
+#define STRESS_LOG_OOM_STACK(size)          do { } WHILE_0
+#define STRESS_LOG_GC_STACK                 do { } WHILE_0
+#define STRESS_LOG_RESERVE_MEM(numChunks)   do { } WHILE_0
+
 #endif // STRESS_LOG
 
 #ifndef __GCENV_BASE_INCLUDED__

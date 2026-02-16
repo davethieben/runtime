@@ -518,4 +518,15 @@ inline bool FitsInU1(uint64_t val)
     return val == (uint64_t)(uint8_t)val;
 }
 
+// ARM32-specific min/max overloads for type compatibility (unsigned int vs unsigned long)
+// Put in std namespace to be found alongside std::min
+#if defined(TARGET_ARM) && !defined(_MSC_VER)
+namespace std {
+    inline unsigned int min(unsigned int a, unsigned long b) { return a < b ? a : (unsigned int)b; }
+    inline unsigned long min(unsigned long a, unsigned int b) { return a < b ? a : b; }
+    inline unsigned int max(unsigned int a, unsigned long b) { return a > b ? a : (unsigned int)b; }
+    inline unsigned long max(unsigned long a, unsigned int b) { return a > b ? a : b; }
+}
+#endif
+
 #endif // __GCENV_BASE_INCLUDED__

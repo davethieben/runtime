@@ -274,7 +274,7 @@ PTR_ExInfo Thread::GetCurExInfo()
 
 void Thread::Construct()
 {
-#ifndef USE_PORTABLE_HELPERS
+#if !defined(USE_PORTABLE_HELPERS) && !defined(TARGET_FREERTOS)
     C_ASSERT(OFFSETOF__Thread__m_pTransitionFrame ==
              (offsetof(Thread, m_pTransitionFrame)));
 #endif // USE_PORTABLE_HELPERS
@@ -592,7 +592,7 @@ EXTERN_C void RhpGcStressHijack();
 // static
 bool Thread::IsHijackTarget(void* address)
 {
-    if (PalGetHijackTarget(/*defaultHijackTarget*/&RhpGcProbeHijack) == address)
+    if (PalGetHijackTarget(/*defaultHijackTarget*/RhpGcProbeHijack) == address)
         return true;
 #ifdef FEATURE_GC_STRESS
     if (&RhpGcStressHijack == address)
@@ -713,7 +713,7 @@ void Thread::HijackCallback(NATIVE_CONTEXT* pThreadContext, Thread* pThreadToHij
 
     pThread->HijackReturnAddress(
         pThreadContext,
-        PalGetHijackTarget(/*defaultHijackTarget*/&RhpGcProbeHijack));
+        PalGetHijackTarget(/*defaultHijackTarget*/RhpGcProbeHijack));
 }
 
 #ifdef FEATURE_GC_STRESS
@@ -754,7 +754,7 @@ void Thread::HijackForGcStress(PAL_LIMITED_CONTEXT * pSuspendCtx)
     }
     if (bForceGC || pInstance->ShouldHijackCallsiteForGcStress(ip))
     {
-        pCurrentThread->HijackReturnAddress(pSuspendCtx, &RhpGcStressHijack);
+        pCurrentThread->HijackReturnAddress(pSuspendCtx, RhpGcStressHijack);
     }
 }
 #endif // FEATURE_GC_STRESS
@@ -1347,7 +1347,7 @@ FCIMPLEND
 FCIMPL0(uint8_t*, RhCurrentNativeThreadId)
 {
 #ifndef TARGET_UNIX
-    return PalNtCurrentTeb();
+    return (uint8_t*)PalNtCurrentTeb();
 #else
     return (uint8_t*)ThreadStore::RawGetCurrentThread();
 #endif // TARGET_UNIX
