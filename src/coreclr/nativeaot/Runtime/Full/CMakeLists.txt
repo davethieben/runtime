@@ -87,8 +87,18 @@ add_custom_command(
             -I"${ARCH_SOURCES_DIR}" "${ASM_OFFSETS_CSPP}" >"${CMAKE_CURRENT_BINARY_DIR}/AsmOffsets.cs"
 )
 
+# For cross-compilation (e.g., x64 host → ARM32 target), the DEFINITIONS may contain HOST_64BIT
+# but AsmOffsets.h uses HOST_64BIT to select between 32/64-bit offsets. Since AsmOffsets.inc is
+# consumed by target assembly code, we need to match the target pointer size. Override HOST_64BIT
+# to match target when they differ.
+set(ASM_OFFSETS_EXTRA_FLAGS "")
+if(CLR_CMAKE_TARGET_ARCH_ARM OR CLR_CMAKE_TARGET_ARCH_I386)
+    # 32-bit target: undefine HOST_64BIT so 32-bit offsets are generated
+    set(ASM_OFFSETS_EXTRA_FLAGS -UHOST_64BIT)
+endif()
+
 add_custom_command(
-    COMMAND ${CMAKE_CXX_COMPILER} ${DEFINITIONS} ${PREPROCESSOR_FLAGS} -I"${NATIVEAOT_RUNTIME_DIR}" -I"${ARCH_SOURCES_DIR}" "${ASM_OFFSETS_CPP}" >"${CMAKE_CURRENT_BINARY_DIR}/AsmOffsets.inc"
+    COMMAND ${CMAKE_CXX_COMPILER} ${DEFINITIONS} ${ASM_OFFSETS_EXTRA_FLAGS} ${PREPROCESSOR_FLAGS} -I"${NATIVEAOT_RUNTIME_DIR}" -I"${ARCH_SOURCES_DIR}" "${ASM_OFFSETS_CPP}" >"${CMAKE_CURRENT_BINARY_DIR}/AsmOffsets.inc"
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/AsmOffsets.inc"
     DEPENDS "${ASM_OFFSETS_CPP}" "${NATIVEAOT_RUNTIME_DIR}/AsmOffsets.h"
     COMMENT "Generating AsmOffsets.inc"

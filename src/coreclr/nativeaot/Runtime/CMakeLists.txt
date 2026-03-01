@@ -145,6 +145,10 @@ elseif(CLR_CMAKE_TARGET_FREERTOS)
 
   include_directories(freertos)
 
+  # Include unix/ directory for shared assembly macros (unixasmmacrosarm.inc)
+  # The FreeRTOS assembly files include these via freertos/asmmacros.inc
+  include_directories(unix)
+
   # sal.h, pshpack/poppack.h
   include_directories(../../pal/inc/rt)
 
@@ -167,6 +171,9 @@ elseif(CLR_CMAKE_TARGET_FREERTOS)
 
   # FreeRTOS doesn't use libunwind - exception handling is different on bare-metal
   add_definitions(-DFEATURE_NATIVEAOT_FREERTOS=1)
+
+  # Bare-metal has no ELF TLS support - use emulated TLS (calls RhpGetThread)
+  add_definitions(-DFEATURE_EMULATED_TLS=1)
 
   # Disable StressLog for bare-metal (doesn't support floating point logging)
   add_definitions(-DNO_STRESS_LOG)
@@ -248,20 +255,17 @@ if (CLR_CMAKE_TARGET_ARCH_AMD64)
   )
 endif (CLR_CMAKE_TARGET_ARCH_AMD64)
 
-# FreeRTOS: Skip assembly files - they need bare-metal specific implementations
-if(NOT CLR_CMAKE_TARGET_FREERTOS)
-  list(APPEND RUNTIME_SOURCES_ARCH_ASM
-    ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/AllocFast.${ASM_SUFFIX}
-    ${ARCH_SOURCES_DIR}/ExceptionHandling.${ASM_SUFFIX}
-    ${ARCH_SOURCES_DIR}/GcProbe.${ASM_SUFFIX}
-    ${ARCH_SOURCES_DIR}/MiscStubs.${ASM_SUFFIX}
-    ${ARCH_SOURCES_DIR}/PInvoke.${ASM_SUFFIX}
-    ${ARCH_SOURCES_DIR}/InteropThunksHelpers.${ASM_SUFFIX}
-    ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/StubDispatch.${ASM_SUFFIX}
-    ${ARCH_SOURCES_DIR}/UniversalTransition.${ASM_SUFFIX}
-    ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/WriteBarriers.${ASM_SUFFIX}
-  )
-endif()
+list(APPEND RUNTIME_SOURCES_ARCH_ASM
+  ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/AllocFast.${ASM_SUFFIX}
+  ${ARCH_SOURCES_DIR}/ExceptionHandling.${ASM_SUFFIX}
+  ${ARCH_SOURCES_DIR}/GcProbe.${ASM_SUFFIX}
+  ${ARCH_SOURCES_DIR}/MiscStubs.${ASM_SUFFIX}
+  ${ARCH_SOURCES_DIR}/PInvoke.${ASM_SUFFIX}
+  ${ARCH_SOURCES_DIR}/InteropThunksHelpers.${ASM_SUFFIX}
+  ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/StubDispatch.${ASM_SUFFIX}
+  ${ARCH_SOURCES_DIR}/UniversalTransition.${ASM_SUFFIX}
+  ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/WriteBarriers.${ASM_SUFFIX}
+)
 
 if (CLR_CMAKE_TARGET_ARCH_AMD64 OR CLR_CMAKE_TARGET_ARCH_ARM64)
   list(APPEND RUNTIME_SOURCES_ARCH_ASM

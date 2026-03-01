@@ -25,7 +25,7 @@ set(CMAKE_SIZE ${TOOLCHAIN_PREFIX}-size)
 # Compiler flags for ARM Cortex-M4 (default, can be overridden)
 set(CMAKE_C_FLAGS_INIT "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16")
 set(CMAKE_CXX_FLAGS_INIT "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16")
-set(CMAKE_ASM_FLAGS_INIT "-mcpu=cortex-m4 -mthumb")
+set(CMAKE_ASM_FLAGS_INIT "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16")
 
 # Bare-metal linker flags
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-specs=nosys.specs -specs=nano.specs")
