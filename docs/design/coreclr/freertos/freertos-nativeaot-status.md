@@ -59,9 +59,9 @@ CMake defines:
 
 **Status**: Fully implemented - all C/C++ code compiles successfully
 
-### Build Results
+### Build Results (Phase 3)
 - **74/77 files** compiled successfully (100% C/C++ success rate)
-- **3 assembly files** excluded (need FreeRTOS-specific implementations)
+- **3 assembly files** excluded at Phase 3 (resolved in Phase 4)
 - **4 static libraries** created:
   - `libRuntime.WorkstationGC.a`
   - `libRuntime.ServerGC.a`
@@ -117,18 +117,9 @@ CMake defines:
 **Files Modified**:
 - `src/coreclr/nativeaot/Runtime/CMakeLists.txt`
   - Line 59-62: Excluded DebugHeader.cpp (requires StressLog types)
-  - Line 82-84: Excluded AsmOffsetsVerify.cpp (assembly not implemented)
+  - Line 82-84: Excluded AsmOffsetsVerify.cpp (assembly offsets verified manually)
   - Line 163: Added `-DNO_STRESS_LOG` definition
-  - **Lines 251-264: Excluded all ARM assembly files** (need bare-metal implementations):
-    - AllocFast.S
-    - ExceptionHandling.S
-    - GcProbe.S
-    - MiscStubs.S
-    - PInvoke.S
-    - InteropThunksHelpers.S
-    - StubDispatch.S
-    - UniversalTransition.S
-    - WriteBarriers.S
+  - Assembly files: Re-enabled in Phase 4 (see Phase 4 section)
 
 - `src/coreclr/CMakeLists.txt`
   - Lines 143-145: Excluded debug-pal (requires Windows.h)
@@ -147,13 +138,14 @@ CMake defines:
 - `src/coreclr/nativeaot/Runtime/gcenv.ee.cpp`
   - Changed ScanFunc* to promote_func* with casts (lines 94, 110, 115, 122)
 
-### Known Limitations
+### Known Limitations (Phase 3)
 
-1. **Assembly Helpers Not Implemented**: 9 ARM assembly files excluded, require FreeRTOS-specific implementations
-2. **StressLog Disabled**: Debug logging not available on bare-metal
-3. **Threading Limited**: Single-threaded runtime, FreeRTOS task integration pending
-4. **Time Functions Stubbed**: Return placeholder values, need FreeRTOS tick integration
-5. **Hardware Exceptions Not Implemented**: ARM Cortex-M exception handling pending
+1. **StressLog Disabled**: Debug logging not available on bare-metal
+2. **Threading Limited**: Single-threaded runtime, FreeRTOS task integration pending
+3. **Time Functions Stubbed**: Return placeholder values, need FreeRTOS tick integration
+4. **Hardware Exceptions Not Implemented**: ARM Cortex-M exception handling pending
+
+Note: Assembly helper limitations were resolved in Phase 4.
 
 ### Build Warnings
 
@@ -162,106 +154,161 @@ Minor warnings remaining (acceptable for cross-compilation):
 - offsetof with non-standard-layout types - acceptable for runtime structures
 - Integer overflow in DECOMMISSIONED_VALUE - intentional poison values
 
-## Phase 4: Assembly Helpers ⏳ PENDING
+## Phase 4: Assembly Helpers ✅ COMPLETE
+
+**Status**: Fully implemented - all 9 ARM assembly files compile and link successfully
+
+### Approach: Include-Path Shim (Not File Duplication)
+
+Rather than creating 9 duplicate FreeRTOS-specific assembly files, Phase 4 took a much cleaner approach: **reuse the existing assembly files unchanged** by fixing the cross-compilation issues that prevented them from building.
+
+The existing ARM assembly files (`arm/*.S` and `runtime/arm/*.S`) are fully compatible with bare-metal — they use standard GAS syntax and AAPCS calling conventions. The actual problems were:
+
+1. **Assembly macros not found** during cross-compilation (HOST_ARM check)
+2. **Wrong struct offsets** generated for 32-bit target (HOST_64BIT leak)
+3. **FPU flags missing** from assembler invocation
+4. **GAS macro parsing** difference with arm-none-eabi toolchain
+
+### Key Fixes Implemented
+
+#### 1. Include-Path Shim for Assembly Macros
+**Problem**: `unix/unixasmmacros.inc` includes ARM-specific macros only when `HOST_ARM` is defined. Cross-compiling from x64 defines `HOST_AMD64`, so ARM macros were never included.
+
+**Solution**: Created `freertos/unixasmmacros.inc` shim that is found first via include path ordering (`freertos/` before `unix/`). The shim redirects to `freertos/asmmacros.inc` which:
+- Force-includes `unixasmmacrosarm.inc` (bypassing the `HOST_ARM` check)
+- Overrides `INLINE_GETTHREAD` to use `RhpGetThread()` (emulated TLS for bare-metal)
+- Overrides `INLINE_GET_TLS_VAR` and `INLINE_GET_ALLOC_CONTEXT_BASE`
+- Overrides `GLOBAL_LABEL` to handle GAS quoted-string concatenation
+
+**Files Created**:
+- `src/coreclr/nativeaot/Runtime/freertos/unixasmmacros.inc` - Shim redirect
+- `src/coreclr/nativeaot/Runtime/freertos/asmmacros.inc` - FreeRTOS macro overrides
+
+#### 2. AsmOffsets.inc Cross-Compilation Fix
+**Problem**: `AsmOffsets.h` uses `#ifdef HOST_64BIT` to select between 32/64-bit struct offsets. Cross-compiling from x64 defines `HOST_64BIT`, generating wrong 64-bit offsets for ARM32 target (e.g., `OFFSETOF__Array__m_Length` was `0x8` instead of `0x4`).
+
+**Solution**: Modified `Full/CMakeLists.txt` to add `-UHOST_64BIT` to the AsmOffsets.inc preprocessor command for 32-bit targets (ARM, i386).
+
+**File Modified**:
+- `src/coreclr/nativeaot/Runtime/Full/CMakeLists.txt`
+
+#### 3. FPU Flags for Assembly Compilation
+**Problem**: The toolchain file set `-mfloat-abi=hard -mfpu=fpv4-sp-d16` for C/C++ compilation but not for ASM. Assembly files using `vpush`/`vpop`/`vldr` (FPU register save/restore) failed with "selected FPU does not support instruction".
+
+**Solution**: Added FPU flags to `CMAKE_ASM_FLAGS_INIT` in the toolchain file.
+
+**File Modified**:
+- `eng/common/cross/toolchain.freertos-windows.cmake`
+
+#### 4. GLOBAL_LABEL Macro Override
+**Problem**: GAS on arm-none-eabi splits `"QuotedString"\MacroParam` into two arguments (e.g., `GLOBAL_LABEL "RhpAssignRefAvLocation"\EXPORT_REG_NAME` in WriteBarriers.S). The original `GLOBAL_LABEL` macro only accepts one parameter.
+
+**Solution**: Overrode `GLOBAL_LABEL` in `freertos/asmmacros.inc` to accept an optional second argument and concatenate them.
+
+#### 5. Emulated TLS for Bare-Metal
+**Problem**: Bare-metal has no ELF TLS support (`__tls_get_addr` requires a dynamic linker).
+
+**Solution**: Added `FEATURE_EMULATED_TLS=1` define. The `INLINE_GETTHREAD` macro now calls `RhpGetThread()` which returns `&tls_CurrentThread` — a global that works correctly for single-threaded bare-metal.
+
+**File Modified**:
+- `src/coreclr/nativeaot/Runtime/CMakeLists.txt` - Added `FEATURE_EMULATED_TLS=1`, re-enabled assembly files, added `unix/` include directory
+
+### Build Results
+
+- **All 9 assembly files** compile successfully:
+  1. WriteBarriers.S - GC write barriers and card table updates
+  2. AllocFast.S - Fast path object and array allocation
+  3. StubDispatch.S - Interface dispatch stubs
+  4. GcProbe.S - GC suspension points
+  5. PInvoke.S - Managed-to-native transitions
+  6. ExceptionHandling.S - Exception dispatch and funclet calls
+  7. UniversalTransition.S - Universal transition thunks
+  8. MiscStubs.S - Stack probing
+  9. InteropThunksHelpers.S - Interop common stub
+
+- **4 static libraries** produced:
+  - `libRuntime.WorkstationGC.a` (5.9 MB, 1774 text symbols)
+  - `libRuntime.ServerGC.a` (8.7 MB, 2596 text symbols)
+  - `libstandalonegc-disabled.a`
+  - `libstandalonegc-enabled.a`
+
+- **AsmOffsets.inc** verified correct for ARM32:
+  - `OFFSETOF__Array__m_Length` = `0x4` (was incorrectly `0x8`)
+  - `OFFSETOF__Thread__m_ThreadStateFlags` = `0x2c` (was incorrectly `0x40`)
+
+### Key Exported Symbols Verified
+
+All critical runtime entry points are present in the libraries:
+- `RhpAssignRef`, `RhpCheckedAssignRef` (write barriers)
+- `RhpNewFast` (fast allocation)
+- `RhpGcPoll` (GC suspension)
+- `RhpPInvoke` (P/Invoke transitions)
+- `RhpThrowEx` (exception throwing)
+- `RhpStackProbe` (stack probing)
+- `RhCommonStub` (interop)
+- `RhpInterfaceDispatchSlow` (interface dispatch)
+- `RhpUniversalTransition` (universal transitions)
+
+## Phase 5: End-to-End Linking and Minimal Execution ⏳ NEXT
 
 **Status**: Not started
 
-**Objective**: Implement FreeRTOS-specific ARM assembly helpers for bare-metal execution
-
-### Required Assembly Files
-
-Nine ARM assembly files need FreeRTOS bare-metal implementations:
-
-#### 1. AllocFast.S
-- Fast path allocation for managed objects
-- Integrates with GC heap allocation
-- **Complexity**: Medium
-- **Dependencies**: GC heap structures, allocation context
-
-#### 2. ExceptionHandling.S
-- Exception dispatch and handling
-- Stack unwinding support
-- **Complexity**: High
-- **Dependencies**: ARM Cortex-M exception model, CONTEXT structure
-
-#### 3. GcProbe.S
-- GC suspension points
-- Stack scanning helpers
-- **Complexity**: Medium
-- **Dependencies**: GC suspension protocol, thread context
-
-#### 4. MiscStubs.S
-- Various runtime helper stubs
-- Transition stubs, call counting
-- **Complexity**: Low-Medium
-- **Dependencies**: Calling conventions
-
-#### 5. PInvoke.S
-- Platform Invoke (P/Invoke) stubs
-- Managed-to-native transitions
-- **Complexity**: Medium
-- **Dependencies**: ARM calling convention, frame management
-
-#### 6. InteropThunksHelpers.S
-- COM interop helpers (may not be needed for bare-metal)
-- **Complexity**: Low (possibly exclude entirely)
-- **Dependencies**: COM support (not applicable to bare-metal)
-
-#### 7. StubDispatch.S
-- Virtual stub dispatch
-- Interface dispatch
-- **Complexity**: Medium
-- **Dependencies**: Virtual method tables, dispatch caches
-
-#### 8. UniversalTransition.S
-- Generic transition thunks
-- Used by various runtime mechanisms
-- **Complexity**: High
-- **Dependencies**: CONTEXT structure, calling conventions
-
-#### 9. WriteBarriers.S
-- GC write barriers
-- Card table updates
-- **Complexity**: Medium-High
-- **Dependencies**: GC card tables, heap boundaries
-
-### Implementation Strategy
-
-1. **Start with simplest**: MiscStubs.S, InteropThunksHelpers.S
-2. **Core GC support**: WriteBarriers.S, GcProbe.S
-3. **Allocation**: AllocFast.S
-4. **Dispatch**: StubDispatch.S
-5. **Transitions**: PInvoke.S, UniversalTransition.S
-6. **Exceptions last**: ExceptionHandling.S (most complex)
-
-### Technical Considerations
-
-- **FreeRTOS Context Switching**: Must integrate with FreeRTOS task context
-- **Stack Layout**: Bare-metal stack layout differs from Linux
-- **Exception Handling**: ARM Cortex-M hardware exceptions vs software exceptions
-- **Calling Convention**: AAPCS (ARM Architecture Procedure Call Standard)
-- **No DWARF unwinding**: Use FreeRTOS-specific unwinding or simplified approach
-
-## Phase 5: Hardware Exception Support ⏳ PENDING
-
-**Status**: Not started
-
-**Objective**: Integrate ARM Cortex-M hardware exception handling with NativeAOT runtime
+**Objective**: Link the NativeAOT runtime libraries with a minimal FreeRTOS application and achieve first managed code execution on bare-metal.
 
 ### Required Components
 
-1. **Exception Vector Table**: Configure ARM Cortex-M exception vectors
-2. **Fault Handlers**: HardFault, MemManage, BusFault, UsageFault
-3. **Context Capture**: Capture CONTEXT from exception frame
-4. **Exception Dispatch**: Route hardware exceptions to managed exception handlers
-5. **Stack Unwinding**: Implement stack unwinding for bare-metal
+1. **Linker Script**: ARM Cortex-M linker script defining memory layout (flash, SRAM, heap, stack regions)
+2. **Startup Code**: Minimal `startup.S` with vector table, reset handler, and C runtime initialization
+3. **FreeRTOS Integration**: `main.c` that initializes FreeRTOS, creates a task, and calls into the NativeAOT entry point
+4. **NativeAOT Bootstrapper**: Link the `Bootstrapper` library and wire up the managed entry point
+5. **Managed Test App**: Minimal C# program compiled with NativeAOT ILC for ARM32
+
+### Deliverables
+
+- Working linker script for STM32F4 (or similar Cortex-M4F board)
+- Startup code + FreeRTOS `main.c` that boots into managed code
+- Build instructions for compiling a C# app with ILC targeting FreeRTOS ARM32
+- QEMU verification (if hardware not available)
+
+### Key Challenges
+
+- **ILC Cross-Compilation**: NativeAOT ILC must target ARM32 bare-metal ELF (no OS, no libc dependencies beyond newlib-nano)
+- **Symbol Resolution**: Ensure all runtime symbols referenced by ILC-generated code are satisfied by the static libraries
+- **Memory Layout**: GC heap region must be contiguous and properly aligned
+- **Entry Point**: Wire up `__managed__Main` or equivalent ILC entry to the FreeRTOS task
+
+### Files to Create
+
+- `samples/freertos-hello/` - Minimal end-to-end sample
+  - `link.ld` - Linker script
+  - `startup.S` - Vector table and reset handler
+  - `main.c` - FreeRTOS initialization
+  - `FreeRTOSConfig.h` - FreeRTOS configuration
+  - `Program.cs` - Managed entry point
+  - `CMakeLists.txt` - Build integration
+
+## Phase 6: Hardware Exception Support ⏳ PENDING
+
+**Status**: Not started
+
+**Objective**: Integrate ARM Cortex-M hardware exception handling with NativeAOT managed exception model
+
+### Required Components
+
+1. **Fault Handlers**: HardFault, MemManage, BusFault, UsageFault handlers that capture context
+2. **Context Capture**: Convert hardware exception frame (R0-R3, R12, LR, PC, xPSR) to NativeAOT `CONTEXT` structure
+3. **Exception Dispatch**: Route hardware exceptions through `RhpThrowHwEx` to managed catch/finally/filter funclets
+4. **Stack Unwinding**: Implement bare-metal stack unwinding (no DWARF, no libunwind)
 
 ### Files to Create
 
 - `src/coreclr/nativeaot/Runtime/freertos/HardwareExceptions.cpp`
-- `src/coreclr/nativeaot/Runtime/freertos/ExceptionVectors.S`
 
-## Phase 6: Threading Integration ⏳ PENDING
+### Dependencies
+
+- Phase 5 must be complete (need a running system to test exception handling)
+
+## Phase 7: Threading Integration ⏳ PENDING
 
 **Status**: Not started
 
@@ -269,39 +316,37 @@ Nine ARM assembly files need FreeRTOS bare-metal implementations:
 
 ### Required Components
 
-1. **Thread-to-Task Mapping**: Map NativeAOT threads to FreeRTOS tasks
-2. **Synchronization**: Implement events, mutexes using FreeRTOS primitives
-3. **Thread Local Storage**: Map to FreeRTOS task storage
-4. **GC Suspension**: Suspend all managed threads for GC
-5. **Thread Scheduler Integration**: Coordinate with FreeRTOS scheduler
+1. **Thread-to-Task Mapping**: Map NativeAOT `Thread` objects to FreeRTOS `TaskHandle_t`
+2. **Synchronization**: Implement events, mutexes, semaphores using FreeRTOS primitives
+3. **Thread Local Storage**: Replace global `tls_CurrentThread` with per-task storage (FreeRTOS `vTaskSetThreadLocalStoragePointer`)
+4. **GC Suspension**: Suspend all managed tasks for GC using `vTaskSuspend`/`vTaskResume`
+5. **Thread Scheduler Integration**: Coordinate managed thread creation/destruction with FreeRTOS scheduler
 
-### Files to Implement
+### Files to Modify
 
-- Update `src/coreclr/nativeaot/Runtime/freertos/PalFreeRTOS.cpp`
-  - Implement `PalCreateThread_FreeRTOS()`
-  - Implement synchronization primitives
-  - Implement TLS support
+- `src/coreclr/nativeaot/Runtime/freertos/PalFreeRTOS.cpp` - Implement real threading primitives
+- `src/coreclr/nativeaot/Runtime/freertos/asmmacros.inc` - Update `INLINE_GETTHREAD` for multi-task TLS
 
-## Phase 7: Testing and Validation ⏳ PENDING
+## Phase 8: Testing and Validation ⏳ PENDING
 
 **Status**: Not started
 
-**Objective**: Create test applications and validate runtime functionality
+**Objective**: Comprehensive testing on real hardware and emulators
 
 ### Test Scenarios
 
-1. **Basic Execution**: Simple console application
-2. **Memory Management**: Allocation, GC, heap stress
-3. **Exception Handling**: Throw/catch, hardware faults
-4. **Threading**: Multi-task scenarios (when threading implemented)
-5. **Performance**: Benchmark allocation, GC, dispatch
-6. **Hardware Integration**: GPIO, UART, peripherals
+1. **Basic Execution**: "Hello World" from managed code on bare-metal
+2. **Memory Management**: Allocation, GC collection cycles, heap stress
+3. **Exception Handling**: Managed throw/catch, hardware fault recovery
+4. **Threading**: Multi-task managed code (after Phase 7)
+5. **P/Invoke**: Managed code calling native C functions (GPIO, UART)
+6. **Performance**: Benchmark allocation, GC, dispatch overhead
 
 ### Target Boards
 
-- STM32F4 Discovery (Cortex-M4)
-- STM32F7 Discovery (Cortex-M7)
-- Other ARM Cortex-M evaluation boards
+- STM32F4 Discovery (Cortex-M4F, 192KB RAM, 1MB Flash)
+- STM32F7 Discovery (Cortex-M7, 512KB RAM, 1MB Flash)
+- QEMU `lm3s6965evb` for CI/automated testing
 
 ## Build Instructions
 
@@ -336,13 +381,14 @@ Static libraries (Phase 3 complete):
 - `libstandalonegc-disabled.a` - Standalone GC disabled
 - `libstandalonegc-enabled.a` - Standalone GC enabled
 
-## Known Issues and Limitations
+## Current Known Issues and Limitations
 
-1. **Assembly Helpers Required**: Cannot execute managed code without Phase 4 completion
-2. **No Exception Handling**: Hardware exceptions not integrated (Phase 5)
-3. **Single-Threaded**: Multi-threading not implemented (Phase 6)
-4. **Time Functions**: Return placeholder values, need FreeRTOS integration
+1. **No End-to-End Execution Yet**: Runtime compiles and links but no test app has been run on hardware/QEMU
+2. **No Hardware Exception Handling**: ARM Cortex-M faults not integrated with managed exception model
+3. **Single-Threaded Only**: All managed code runs on one FreeRTOS task
+4. **PAL Functions Stubbed**: Time, threading, synchronization return placeholder values
 5. **No StressLog**: Debug logging disabled for bare-metal
+6. **ILC Targeting Untested**: NativeAOT ILC has not been verified targeting FreeRTOS ARM32
 
 ## References
 
@@ -355,11 +401,10 @@ Static libraries (Phase 3 complete):
 
 To contribute to FreeRTOS NativeAOT support:
 
-1. Focus on Phase 4 (Assembly Helpers) - highest priority
-2. Test on real ARM Cortex-M hardware
-3. Follow existing ARM assembly patterns from `arm` directory
-4. Ensure bare-metal compatibility (no OS dependencies)
-5. Document any FreeRTOS-specific requirements
+1. Focus on Phase 5 (End-to-End Linking) - highest priority
+2. Test on real ARM Cortex-M hardware or QEMU
+3. Ensure bare-metal compatibility (no OS dependencies)
+4. Document any FreeRTOS-specific requirements
 
 ## Contacts
 
@@ -367,5 +412,5 @@ For questions about FreeRTOS NativeAOT support, please file an issue on the dotn
 
 ---
 
-Last Updated: 2026-02-13
-Status: Phase 3 Complete, Phase 4 Pending
+Last Updated: 2026-03-01
+Status: Phase 4 Complete, Phase 5 Next

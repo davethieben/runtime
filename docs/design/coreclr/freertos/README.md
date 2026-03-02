@@ -8,7 +8,7 @@ This document provides a roadmap to all FreeRTOS NativeAOT documentation.
 **Current Status**: [Implementation Status](freertos-nativeaot-status.md)
 **Technical Details**: [PAL README](../../src/coreclr/nativeaot/Runtime/freertos/README.md)
 **Architecture**: [Design Decisions](freertos-design-decisions.md)
-**Contributing**: [Phase 4 Plan](freertos-phase4-plan.md) | [Phase 4 Checklist](freertos-phase4-checklist.md)
+**Contributing**: [Phase 4 Report](freertos-phase4-plan.md) | [Phase 5 Plan](freertos-phase4-checklist.md)
 
 ---
 
@@ -16,8 +16,8 @@ This document provides a roadmap to all FreeRTOS NativeAOT documentation.
 
 **FreeRTOS NativeAOT** enables .NET managed code to run on ARM Cortex-M microcontrollers using the FreeRTOS bare-metal RTOS. This brings C# language productivity to embedded systems development.
 
-**Current Status**: ✅ **Phase 3 Complete** - C/C++ runtime compiles successfully
-**Next Step**: Phase 4 - Implement ARM assembly helpers
+**Current Status**: ✅ **Phase 4 Complete** - All C/C++ and assembly code compiles and links
+**Next Step**: Phase 5 - End-to-end linking and first managed code execution
 
 ---
 
@@ -57,16 +57,15 @@ If you want to **contribute** to FreeRTOS NativeAOT:
    - Integration patterns
    - Testing guidance
 
-3. **Start Phase 4**: [Phase 4 Implementation Plan](freertos-phase4-plan.md)
-   - Detailed assembly helper guide
-   - Priority order
-   - Testing strategy
-   - Timeline estimates
+3. **Review Phase 4**: [Phase 4 Completion Report](freertos-phase4-plan.md)
+   - Include-path shim approach
+   - Cross-compilation fixes
+   - Build results
 
-4. **Track progress**: [Phase 4 Checklist](freertos-phase4-checklist.md)
-   - Step-by-step tasks
-   - Test requirements
-   - Validation criteria
+4. **Start Phase 5**: [Phase 5 Plan](freertos-phase4-checklist.md)
+   - End-to-end linking
+   - ILC investigation
+   - QEMU testing
 
 ### For Maintainers
 
@@ -98,8 +97,8 @@ If you're **maintaining** FreeRTOS NativeAOT code:
 | **[freertos-nativeaot-status.md](freertos-nativeaot-status.md)** | Overall status, all 7 phases | Everyone |
 | **[freertos-quickstart.md](freertos-quickstart.md)** | Practical getting started guide | Users/Developers |
 | **[freertos-design-decisions.md](freertos-design-decisions.md)** | Architectural decisions and rationale | Contributors/Maintainers |
-| **[freertos-phase4-plan.md](freertos-phase4-plan.md)** | Detailed Phase 4 implementation guide | Contributors |
-| **[freertos-phase4-checklist.md](freertos-phase4-checklist.md)** | Phase 4 progress tracking | Contributors |
+| **[freertos-phase4-plan.md](freertos-phase4-plan.md)** | Phase 4 completion report | Contributors/Maintainers |
+| **[freertos-phase4-checklist.md](freertos-phase4-checklist.md)** | Phase 5 implementation plan | Contributors |
 
 ### Source Code Documentation
 
@@ -172,57 +171,44 @@ If you're **maintaining** FreeRTOS NativeAOT code:
 
 ---
 
-### ⏳ Phase 4: Assembly Helpers (PENDING)
-**Status**: Not started - ready for implementation
-**Summary**: Implement 9 ARM assembly files for GC, allocation, dispatch, interop
+### ✅ Phase 4: Assembly Helpers (COMPLETE)
+**Status**: Fully working - all 9 assembly files compile and link
+**Summary**: Reused existing ARM assembly files via include-path shims instead of file duplication
 
-**Required Files**:
-1. ⭐⭐⭐ WriteBarriers.S - GC write barriers (CRITICAL)
-2. ⭐⭐⭐ GcProbe.S - GC suspension points (CRITICAL)
-3. ⭐⭐ AllocFast.S - Fast allocation (HIGH PRIORITY)
-4. ⭐⭐ MiscStubs.S - Misc helpers
-5. ⭐⭐ StubDispatch.S - Virtual dispatch
-6. ⭐ PInvoke.S - Managed-native transitions
-7. ⭐ UniversalTransition.S - Generic transitions
-8. ⏳ ExceptionHandling.S - Exception dispatch (Phase 5 overlap)
-9. ❓ InteropThunksHelpers.S - COM interop (may skip)
+**Key Achievement**: Fixed cross-compilation infrastructure so existing assembly files work unchanged for FreeRTOS:
+- Include-path shim for assembly macros (bypasses `HOST_ARM` check)
+- AsmOffsets.inc cross-compilation fix (`-UHOST_64BIT` for 32-bit targets)
+- FPU flags added to ASM compilation
+- GLOBAL_LABEL macro override for GAS compatibility
+- Emulated TLS via `RhpGetThread()` for bare-metal
 
-**Documentation**:
-- **Implementation Guide**: [Phase 4 Plan](freertos-phase4-plan.md)
-- **Progress Tracking**: [Phase 4 Checklist](freertos-phase4-checklist.md)
-- **Technical Details**: [PAL README - Assembly Status](../../src/coreclr/nativeaot/Runtime/freertos/README.md#assembly-helper-status)
-
-**Estimated Timeline**: 6-8 weeks (1 developer)
-
-**Getting Started**:
-1. Read [Phase 4 Plan](freertos-phase4-plan.md)
-2. Study existing ARM assembly in `src/coreclr/nativeaot/Runtime/arm/`
-3. Set up ARM development board
-4. Start with WriteBarriers.S (highest priority)
+**Documentation**: [Phase 4 Completion Report](freertos-phase4-plan.md)
 
 ---
 
-### ⏳ Phase 5: Hardware Exception Support (PENDING)
+### ⏳ Phase 5: End-to-End Linking (NEXT)
+**Status**: Not started
+**Summary**: Link runtime libraries with a minimal FreeRTOS app, achieve first managed code execution
+
+**Documentation**: [Phase 5 Plan](freertos-phase4-checklist.md)
+
+---
+
+### ⏳ Phase 6: Hardware Exception Support (PENDING)
 **Status**: Not started
 **Summary**: Integrate ARM Cortex-M hardware exceptions with managed exception handling
 
-**Documentation**: See [Status - Phase 5](freertos-nativeaot-status.md#phase-5-hardware-exception-support--pending)
-
 ---
 
-### ⏳ Phase 6: Threading Integration (PENDING)
+### ⏳ Phase 7: Threading Integration (PENDING)
 **Status**: Not started
 **Summary**: Map NativeAOT threads to FreeRTOS tasks, implement multi-threading
 
-**Documentation**: See [Status - Phase 6](freertos-nativeaot-status.md#phase-6-threading-integration--pending)
-
 ---
 
-### ⏳ Phase 7: Testing and Validation (PENDING)
+### ⏳ Phase 8: Testing and Validation (PENDING)
 **Status**: Not started
 **Summary**: Comprehensive testing on real hardware, validation, benchmarking
-
-**Documentation**: See [Status - Phase 7](freertos-nativeaot-status.md#phase-7-testing-and-validation--pending)
 
 ---
 
@@ -275,14 +261,16 @@ dotnet/runtime/
 │   ├── freertos-nativeaot-status.md      # Status & roadmap
 │   ├── freertos-quickstart.md            # Getting started
 │   ├── freertos-design-decisions.md      # Architecture
-│   ├── freertos-phase4-plan.md           # Phase 4 guide
-│   └── freertos-phase4-checklist.md      # Phase 4 tracking
+│   ├── freertos-phase4-plan.md           # Phase 4 completion report
+│   └── freertos-phase4-checklist.md      # Phase 5 plan
 │
 ├── src/coreclr/nativeaot/Runtime/
 │   ├── freertos/                         # FreeRTOS PAL
 │   │   ├── README.md                     # PAL documentation
 │   │   ├── PalFreeRTOS.h/cpp            # PAL implementation
-│   │   └── NativeContext.h               # ARM context wrapper
+│   │   ├── NativeContext.h               # ARM context wrapper
+│   │   ├── asmmacros.inc                 # Assembly macro overrides (Phase 4)
+│   │   └── unixasmmacros.inc            # Include-path shim (Phase 4)
 │   │
 │   └── CMakeLists.txt                    # Build configuration
 │
@@ -351,6 +339,6 @@ For questions about FreeRTOS NativeAOT support, file an issue on dotnet/runtime 
 
 ---
 
-**Last Updated**: 2026-02-13
-**Current Phase**: Phase 3 Complete, Phase 4 Ready
-**Next Milestone**: Phase 4 - Assembly Helpers Implementation
+**Last Updated**: 2026-03-01
+**Current Phase**: Phase 4 Complete
+**Next Milestone**: Phase 5 - End-to-End Linking and First Execution

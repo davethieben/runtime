@@ -29,6 +29,22 @@ Implementation of FreeRTOS PAL functions.
 - `PalGetCurrentThreadId_FreeRTOS()` - Returns FreeRTOS task handle
 - Synchronization primitives using FreeRTOS semaphores
 
+### asmmacros.inc (Phase 4)
+FreeRTOS-specific assembly macro overrides for cross-compilation.
+
+**Purpose**: Fixes assembly macro includes that fail during x64→ARM32 cross-compilation:
+- Force-includes ARM macros (bypassing `HOST_ARM` check in `unixasmmacros.inc`)
+- Overrides `INLINE_GETTHREAD` for emulated TLS (bare-metal has no ELF TLS)
+- Overrides `GLOBAL_LABEL` to handle GAS quoted-string argument parsing
+- Overrides `INLINE_GET_TLS_VAR` and `INLINE_GET_ALLOC_CONTEXT_BASE`
+
+**Key Design**: Uses `.purgem`/`.macro` pattern to override macros defined in `unixasmmacrosarm.inc`.
+
+### unixasmmacros.inc (Phase 4)
+Include-path shim that redirects `#include <unixasmmacros.inc>` to `asmmacros.inc`.
+
+**How It Works**: The `freertos/` directory is listed before `unix/` in include paths. When assembly files do `#include <unixasmmacros.inc>`, this shim is found first and redirects to the FreeRTOS-specific `asmmacros.inc` instead of the unix version.
+
 ### NativeContext.h
 ARM Cortex-M native context structure for FreeRTOS.
 
@@ -149,20 +165,20 @@ ARM Cortex-M processors use a hardware exception model:
 
 ## Assembly Helper Status
 
-**Status**: Not implemented (Phase 4 pending)
+**Status**: ✅ All 9 assembly files compile and link (Phase 4 complete)
 
-Nine ARM assembly files need FreeRTOS bare-metal implementations. See [Phase 4 details](../../../docs/design/coreclr/freertos-nativeaot-status.md#phase-4-assembly-helpers--pending) in the status document.
+The existing ARM assembly files (`arm/*.S` and `runtime/arm/*.S`) are reused unchanged. Cross-compilation issues are fixed via include-path shims in this directory (`asmmacros.inc`, `unixasmmacros.inc`). See the [Phase 4 Completion Report](../../../../docs/design/coreclr/freertos/freertos-phase4-plan.md) for details.
 
-**Priority Order**:
-1. WriteBarriers.S (critical for GC)
-2. GcProbe.S (GC suspension points)
-3. AllocFast.S (fast allocation)
-4. MiscStubs.S (various helpers)
-5. StubDispatch.S (virtual dispatch)
-6. PInvoke.S (managed-to-native)
-7. UniversalTransition.S (generic transitions)
-8. ExceptionHandling.S (exception dispatch)
-9. InteropThunksHelpers.S (may not be needed)
+**Assembly Files (all compiling)**:
+1. WriteBarriers.S - GC write barriers and card table updates
+2. AllocFast.S - Fast path object/array allocation
+3. StubDispatch.S - Interface dispatch stubs
+4. GcProbe.S - GC suspension points
+5. PInvoke.S - Managed-to-native transitions
+6. ExceptionHandling.S - Exception dispatch and funclet calls
+7. UniversalTransition.S - Universal transition thunks
+8. MiscStubs.S - Stack probing
+9. InteropThunksHelpers.S - Interop common stub
 
 ## Testing
 
@@ -306,17 +322,17 @@ include_directories(
 
 To implement missing functionality:
 
-1. **Phase 4 (Assembly)**: Implement assembly helpers
-   - Study existing ARM assembly in `../arm/`
-   - Adapt for bare-metal (no OS dependencies)
-   - Test with hardware or QEMU
+1. **Phase 5 (End-to-End)**: Link and run managed code on bare-metal
+   - Investigate ILC ARM32 bare-metal output
+   - Create linker script and startup code
+   - Test on QEMU or hardware
 
-2. **Phase 5 (Exceptions)**: Hardware exception integration
+2. **Phase 6 (Exceptions)**: Hardware exception integration
    - Study ARM Cortex-M exception model
    - Integrate with FreeRTOS exception handlers
    - Test fault handling
 
-3. **Phase 6 (Threading)**: Multi-threading support
+3. **Phase 7 (Threading)**: Multi-threading support
    - Map threads to FreeRTOS tasks
    - Implement synchronization primitives
    - Test GC suspension across tasks
@@ -327,8 +343,8 @@ To implement missing functionality:
 - [ARM Cortex-M Programming Guide](https://developer.arm.com/documentation/den0042/latest/)
 - [AAPCS - ARM Procedure Call Standard](https://github.com/ARM-software/abi-aa/blob/main/aapcs32/aapcs32.rst)
 - [NativeAOT Architecture](../../docs/design/coreclr/botr/ryujit-overview.md)
-- [FreeRTOS NativeAOT Status](../../../docs/design/coreclr/freertos-nativeaot-status.md)
+- [FreeRTOS NativeAOT Status](../../../../docs/design/coreclr/freertos/freertos-nativeaot-status.md)
 
 ---
 
-Last Updated: 2026-02-13
+Last Updated: 2026-03-01

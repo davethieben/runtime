@@ -2,7 +2,7 @@
 
 This guide walks you through setting up a basic FreeRTOS project with NativeAOT runtime support.
 
-**⚠️ Current Status**: Phase 3 complete - C/C++ runtime compiles, but assembly helpers not yet implemented. This guide is for developers who want to contribute to Phase 4+ or experiment with the foundation.
+**⚠️ Current Status**: Phase 4 complete - all C/C++ and assembly code compiles and links into static libraries. End-to-end execution (linking with a managed app and running on hardware/QEMU) is Phase 5. This guide is for developers who want to contribute to Phase 5+ or experiment with the foundation.
 
 ## Prerequisites
 

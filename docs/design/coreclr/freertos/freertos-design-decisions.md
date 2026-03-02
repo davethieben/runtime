@@ -251,73 +251,90 @@ enum LogFacilitiesEnum: unsigned int {
 
 ## Assembly Helper Strategy
 
-### Decision: Exclude Assembly Files in Phase 3
+### Decision: Include-Path Shim Over File Duplication (Phase 4)
 
-**Rationale**: ARM assembly files use Linux-specific macros (`prolog_push`, `prolog_vpush`, `.att_syntax`) that don't work with bare-metal assembler.
+**Problem**: The 9 ARM assembly files (`WriteBarriers.S`, `AllocFast.S`, etc.) failed to compile during cross-compilation from x64 to ARM32, despite being standard GAS syntax. The failures were caused by:
+
+1. `unixasmmacros.inc` checking `HOST_ARM` to include ARM macros — not defined when cross-compiling from x64
+2. `AsmOffsets.h` using `HOST_64BIT` for offset selection — wrong for ARM32 target
+3. ASM compiler flags missing FPU support (`-mfpu=fpv4-sp-d16`)
+4. GAS parsing `"QuotedString"\MacroParam` as two arguments on arm-none-eabi
+
+**Decision**: Reuse existing assembly files unchanged via include-path shims, rather than creating 9 duplicate FreeRTOS-specific files.
+
+**Rationale**:
+- The existing assembly files use standard AAPCS calling conventions and GAS syntax — they are already bare-metal compatible
+- The failures were in the build infrastructure (macros, offsets, compiler flags), not the assembly code itself
+- Maintaining 9 duplicate files would create a significant maintenance burden
+- Include-path shims are minimal, targeted, and easy to understand
 
 **Implementation**:
+
+The `freertos/` directory is listed before `unix/` in include paths. A shim file intercepts the `#include <unixasmmacros.inc>` directive:
+
+```
+Assembly file (#include <unixasmmacros.inc>)
+    → finds freertos/unixasmmacros.inc (shim)
+        → includes freertos/asmmacros.inc
+            → defines base macros (C_FUNC, LOCAL_LABEL, etc.)
+            → force-includes unix/unixasmmacrosarm.inc (bypasses HOST_ARM check)
+            → overrides INLINE_GETTHREAD (emulated TLS for bare-metal)
+            → overrides GLOBAL_LABEL (handles GAS two-argument parsing)
+```
+
+**Files Created**:
+- `freertos/unixasmmacros.inc` — 3-line shim redirecting to `asmmacros.inc`
+- `freertos/asmmacros.inc` — FreeRTOS macro overrides (~85 lines)
+
+**Alternative Considered**: Creating 9 separate `freertos/*.S` assembly files. Rejected because:
+- Massive code duplication (~2000 lines)
+- Every upstream change to the ARM assembly would need to be mirrored
+- The actual assembly instructions are correct for bare-metal; only the macro infrastructure needed fixing
+
+**Trade-off**: Include-path shims are somewhat implicit — a developer reading `WriteBarriers.S` might not realize the macros are overridden. This is documented in `asmmacros.inc` header comments and this design document.
+
+### Decision: Fix AsmOffsets.inc for Cross-Compilation
+
+**Problem**: `AsmOffsets.h` uses `#ifdef HOST_64BIT` to select struct offsets. When cross-compiling from x64, `HOST_64BIT` is defined, generating 64-bit offsets for a 32-bit target (e.g., `OFFSETOF__Array__m_Length` = `0x8` instead of `0x4`).
+
+**Solution**: Added `-UHOST_64BIT` to the AsmOffsets.inc preprocessor command for 32-bit targets in `Full/CMakeLists.txt`:
+
 ```cmake
-# CMakeLists.txt
-if(NOT CLR_CMAKE_TARGET_FREERTOS)
-  list(APPEND RUNTIME_SOURCES_ARCH_ASM
-    ${ARCH_SOURCES_DIR}/ExceptionHandling.${ASM_SUFFIX}
-    ${ARCH_SOURCES_DIR}/GcProbe.${ASM_SUFFIX}
-    # ... other .S files
-  )
+set(ASM_OFFSETS_EXTRA_FLAGS "")
+if(CLR_CMAKE_TARGET_ARCH_ARM OR CLR_CMAKE_TARGET_ARCH_I386)
+    set(ASM_OFFSETS_EXTRA_FLAGS -UHOST_64BIT)
 endif()
 ```
 
-**Files Excluded** (9 total):
-1. AllocFast.S
-2. ExceptionHandling.S
-3. GcProbe.S
-4. MiscStubs.S
-5. PInvoke.S
-6. InteropThunksHelpers.S
-7. StubDispatch.S
-8. UniversalTransition.S
-9. WriteBarriers.S
+**Alternative Considered**: Modifying `AsmOffsets.h` to check `TARGET_32BIT` instead of `HOST_64BIT`. Rejected to avoid modifying shared infrastructure that works correctly for all other build configurations.
 
-**Phase 4 Strategy**: Reimplement these using bare-metal compatible assembly:
+### Decision: Emulated TLS via RhpGetThread()
+
+**Problem**: Bare-metal has no ELF TLS support (`__tls_get_addr` requires a dynamic linker). The standard `INLINE_GETTHREAD` macro uses `INLINE_GET_TLS_VAR tls_CurrentThread` which accesses thread-local storage.
+
+**Solution**: Override `INLINE_GETTHREAD` in `freertos/asmmacros.inc` to call `RhpGetThread()` — a C function that returns `&tls_CurrentThread`. On single-threaded bare-metal, `tls_CurrentThread` is effectively a global variable.
 
 ```asm
-// Example: Write Barrier (bare-metal style)
-.syntax unified
-.thumb
-.global JIT_WriteBarrier
-
-JIT_WriteBarrier:
-    // ARM Cortex-M implementation
-    // No prolog_push macro - use direct push
-    push    {r0-r3, lr}
-    // ... implementation
-    pop     {r0-r3, pc}
+.purgem INLINE_GETTHREAD
+.macro INLINE_GETTHREAD
+    bl C_FUNC(RhpGetThread)
+.endm
 ```
 
-**Challenges**:
-1. **No DWARF unwinding**: Must use simplified unwinding or FreeRTOS context
-2. **Different calling convention**: Bare-metal may have different register usage
-3. **No OS exception handlers**: Hardware faults go to ARM exception vectors
-4. **Testing**: Requires hardware or QEMU for validation
-
-**Priority Order**:
-1. **WriteBarriers.S** - Critical for GC correctness
-2. **GcProbe.S** - GC suspension points
-3. **AllocFast.S** - Performance critical
-4. Others as needed
+**Trade-off**: Function call overhead on every `INLINE_GETTHREAD` invocation. Acceptable for single-threaded bare-metal. When multi-threading is added (Phase 7), this can be updated to use FreeRTOS `vTaskGetThreadLocalStoragePointer()`.
 
 ### Decision: Exclude AsmOffsetsVerify.cpp
 
-**Problem**: Verifies that assembly offset constants match C++ structure layout. Fails when assembly files are not built.
+**Problem**: Verifies assembly offset constants match C++ structure layout at build time. Uses assembly-level validation that isn't compatible with the cross-compilation setup.
 
-**Solution**: Conditional exclusion:
+**Solution**: Conditional exclusion (offsets verified manually via inspection):
 ```cmake
 if(NOT CLR_CMAKE_TARGET_FREERTOS)
     list(APPEND FULL_RUNTIME_SOURCES AsmOffsetsVerify.cpp)
 endif()
 ```
 
-**Future**: Re-enable when assembly helpers are implemented and offsets can be verified.
+**Future**: Re-enable when a test harness can run the verification on-target.
 
 ## Exception Handling
 
@@ -494,7 +511,7 @@ Runtime/
 
 ### 1. HOST vs TARGET Distinction Critical
 
-Many cross-compilation issues stemmed from code checking `HOST_*` instead of `TARGET_*`. Always check target platform first:
+Many cross-compilation issues stemmed from code checking `HOST_*` instead of `TARGET_*`. This affected both C++ code and assembly macro includes. Always check target platform first:
 
 ```cpp
 #if defined(TARGET_WINDOWS) || (defined(HOST_WINDOWS) && !defined(TARGET_FREERTOS))
@@ -521,9 +538,17 @@ Phased approach (build system → types → PAL → assembly → exceptions → 
 
 Stubbing out unavailable features with proper signatures and constants (e.g., StressLog) prevents cascade of compilation errors.
 
-### 5. Documentation Critical for Bare-Metal
+### 5. Reuse Over Duplication
 
-Embedded developers need clear guidance on memory configuration, build integration, and hardware requirements. Extensive documentation is not optional.
+Phase 4 demonstrated that fixing the build infrastructure (macros, offsets, compiler flags) was far superior to duplicating source files. The include-path shim approach added ~90 lines of code while avoiding ~2000 lines of duplicated assembly. This principle should guide future phases.
+
+### 6. CMAKE_FLAGS_INIT Only Applies at Initial Configuration
+
+`CMAKE_ASM_FLAGS_INIT` (and similar `_INIT` variables) only take effect during the first `cmake` configuration. Subsequent reconfigures read from the CMake cache. When changing toolchain files, either delete `CMakeCache.txt` or update the cache manually.
+
+### 7. GAS Macro Parsing Varies Across Toolchains
+
+GNU Assembler (GAS) behavior for macro argument parsing differs between native ARM builds and arm-none-eabi cross-compilation. Quoted strings concatenated with macro parameter expansions (`"string"\param`) may be split into separate arguments. Design macros defensively with optional extra parameters.
 
 ## References
 
@@ -548,6 +573,6 @@ Embedded developers need clear guidance on memory configuration, build integrati
 
 ---
 
-Last Updated: 2026-02-13
-Document Version: 1.0
+Last Updated: 2026-03-01
+Document Version: 1.1 (Phase 4 complete)
 Authors: NativeAOT FreeRTOS Team
